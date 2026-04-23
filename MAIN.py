@@ -1,9 +1,9 @@
 # Main function of staggered_grid.py
 import numpy as np
-from CORE import *
-from TEST import *
-from PLOTS import *
-from DIAG import *
+from core import *
+from test import *
+from plots import *
+from diag import *
 
 
 # =========================================================

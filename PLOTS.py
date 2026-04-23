@@ -1,7 +1,7 @@
 # Plots for staggered_grid.py
 import numpy as np
 import matplotlib.pyplot as plt
-from CORE import compute_pressure_gradient_mac
+from core import compute_pressure_gradient_mac
 # =========================================================
 # Plots
 # =========================================================

@@ -1,5 +1,5 @@
 import numpy as np
-from CORE import (
+from core import (
     compute_divergence_mac,
     compute_pressure_gradient_mac,
     compute_laplacian_center,
