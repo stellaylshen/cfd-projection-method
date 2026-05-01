@@ -12,10 +12,13 @@ if __name__ == "__main__":
 # Layer 3: actual cavity simulation
 # -------------------------------------------------
     Nx, Ny = 15, 15
-    nsteps = 200
+    nsteps = 100
     dt = 5e-3
-    nu = 0.2
+    Re = 100.0
     U_lid = 1.0
+    L = 1.0
+    nu = U_lid * L / Re
+    print(f"Re = {Re}, nu = {nu}")
 
     dx, dy, p, u, v, Xp, Yp, Xu, Yu, Xv, Yv = setup_mac_grid(Nx, Ny)
 
@@ -41,6 +44,22 @@ if __name__ == "__main__":
     print("max |u_center| 3rd row =", np.max(np.abs(u_c[:, -3])))
     print("max |u_center| 4th row =", np.max(np.abs(u_c[:, -4])))
 
+    # Ghia et al. (1982), Re=100
+    y_ghia = np.array([
+        1.0000, 0.9766, 0.9688, 0.9609, 0.9531,
+        0.8516, 0.7344, 0.6172, 0.5000,
+        0.4531, 0.2813, 0.1719, 0.1016,
+        0.0703, 0.0625, 0.0547, 0.0000
+    ])
+
+    u_ghia = np.array([
+        1.0000, 0.84123, 0.78871, 0.73722, 0.68717,
+        0.23151, 0.00332, -0.13641, -0.20581,
+        -0.21090, -0.15662, -0.10150, -0.06434,
+        -0.04775, -0.04192, -0.03717, 0.00000
+    ])
+
+
     # 1) final velocity field
     plt.figure(figsize=(6, 5))
     plt.quiver(Xp, Yp, u_c, v_c)
@@ -50,18 +69,23 @@ if __name__ == "__main__":
 
     # 2) final div_new
     plt.figure(figsize=(6, 5))
-    plt.contourf(Xp, Yp, final["div_new"], levels=20)
-    plt.colorbar(label="div_new")
-    plt.title("Final div_new")
+    plt.contourf(Xp, Yp, final["div_proj"], levels=20)
+    plt.colorbar(label="div_proj")
+    plt.title("Final div_proj")
     plt.gca().set_aspect("equal")
     plt.show()
 
     # 3) centerline u profile
     i_mid = Nx // 2
+
     plt.figure(figsize=(5, 4))
-    plt.plot(u_c[i_mid, :], Yp[i_mid, :], marker="o")
-    plt.xlabel("u_center")
+    plt.plot(u_c[i_mid, :], Yp[i_mid, :], marker="o", label="simulation")
+    plt.plot(u_ghia, y_ghia, "s", label="Ghia et al. 1982")
+    plt.xlabel("u velocity at x = 0.5")
     plt.ylabel("y")
-    plt.title("Centerline u profile")
+    plt.title(f"Centerline u profile, Re={Re:.0f}")
     plt.grid(True)
+    plt.legend()
     plt.show()
+
+
