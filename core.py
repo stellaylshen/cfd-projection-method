@@ -108,7 +108,7 @@ def solve_poisson_jacobi_center_neumann(rhs, u_star, v_star, dx, dy, dt, max_ite
     coef = 2.0 * (dx**2 + dy**2)
 
     for it in range(max_iter):
-        pn[:] = p[:]   # <- 這行你現在少了
+        pn[:] = p[:]   # <- 這行現在少了
 
         # 用 predictor 更新 boundary，但更新到 pn 比較乾淨
         pn = apply_pressure_bc_neumann_from_predictor(pn, u_star, v_star, dx, dy, dt)
@@ -127,13 +127,195 @@ def solve_poisson_jacobi_center_neumann(rhs, u_star, v_star, dx, dy, dt, max_ite
 
         err = np.max(np.abs(p - pn))
         if err < tol:
-            if verbose: # verbose = 冗長(？)
+            if verbose: # verbose = 展開細節
                 print(f"Poisson converged at iteration {it}, error = {err:.3e}")
             break
     else:
         print(f"Poisson NOT converged, final error = {err:.3e}")
 
     return p
+
+
+def solve_poisson_jacobi_mac_consistent(rhs, dx, dy, max_iter=1000, tol=1e-6, verbose=False):
+    """
+    Solve L p = rhs where L = div(grad(p)) using the SAME MAC
+    divergence and gradient convention as project_velocity_mac().
+
+    Boundary meaning:
+    - pressure normal gradient at domain boundary is zero
+    - boundary faces are not corrected by pressure
+    - pressure is fixed by removing mean(p)
+    """
+
+    Nx, Ny = rhs.shape
+
+    # Neumann compatibility condition
+    rhs = rhs - np.mean(rhs)
+
+    p = np.zeros((Nx, Ny))
+    pn = np.zeros_like(p)
+
+    inv_dx2 = 1.0 / dx**2
+    inv_dy2 = 1.0 / dy**2
+
+    for it in range(max_iter):
+        pn[:] = p[:]
+
+        # loop version first: slower, but much clearer and less bug-prone
+        for i in range(Nx):
+            for j in range(Ny):
+                neighbor_sum = 0.0
+                diag = 0.0
+
+                # left neighbor
+                if i > 0:
+                    neighbor_sum += pn[i - 1, j] * inv_dx2
+                    diag += inv_dx2
+
+                # right neighbor
+                if i < Nx - 1:
+                    neighbor_sum += pn[i + 1, j] * inv_dx2
+                    diag += inv_dx2
+
+                # bottom neighbor
+                if j > 0:
+                    neighbor_sum += pn[i, j - 1] * inv_dy2
+                    diag += inv_dy2
+
+                # top neighbor
+                if j < Ny - 1:
+                    neighbor_sum += pn[i, j + 1] * inv_dy2
+                    diag += inv_dy2
+
+                p[i, j] = (neighbor_sum - rhs[i, j]) / diag
+
+        # pressure gauge fixing: pressure itself is arbitrary up to a constant
+        p -= np.mean(p)
+
+        err = np.max(np.abs(p - pn))
+
+        if err < tol:
+            if verbose:
+                print(f"Poisson converged at iteration {it}, error = {err:.3e}")
+            break
+    else:
+        if verbose:
+            print(f"Poisson NOT converged, final error = {err:.3e}")
+
+    return p
+
+def solve_poisson_jacobi_mac_consistent_vectorized(
+    rhs, dx, dy, max_iter=1000, tol=1e-6, verbose=False
+):
+    """
+    Vectorized Jacobi solver for Lp = rhs,
+    where L = div(grad(p)) using the same MAC convention.
+
+    Boundary behavior:
+    - zero normal pressure gradient
+    - boundary cells have fewer neighbors
+    """
+
+    Nx, Ny = rhs.shape
+
+    rhs = rhs - np.mean(rhs)
+
+    p = np.zeros((Nx, Ny))
+
+    inv_dx2 = 1.0 / dx**2
+    inv_dy2 = 1.0 / dy**2
+
+    for it in range(max_iter):
+        pn = p.copy()
+
+        neighbor_sum = np.zeros_like(p)
+        diag = np.zeros_like(p)
+
+        # left neighbor
+        neighbor_sum[1:, :] += pn[:-1, :] * inv_dx2
+        diag[1:, :] += inv_dx2
+
+        # right neighbor
+        neighbor_sum[:-1, :] += pn[1:, :] * inv_dx2
+        diag[:-1, :] += inv_dx2
+
+        # bottom neighbor
+        neighbor_sum[:, 1:] += pn[:, :-1] * inv_dy2
+        diag[:, 1:] += inv_dy2
+
+        # top neighbor
+        neighbor_sum[:, :-1] += pn[:, 1:] * inv_dy2
+        diag[:, :-1] += inv_dy2
+
+        p = (neighbor_sum - rhs) / diag
+
+        # pressure gauge
+        p -= np.mean(p)
+
+        err = np.max(np.abs(p - pn))
+
+        if err < tol:
+            if verbose:
+                print(f"Poisson converged at iteration {it}, error = {err:.3e}")
+            break
+    else:
+        if verbose:
+            print(f"Poisson NOT converged, final error = {err:.3e}")
+
+    return p
+
+def solve_poisson_sor_mac(
+    rhs, dx, dy, omega=1.7, max_iter=1000, tol=1e-6, verbose=False
+):
+    Nx, Ny = rhs.shape
+
+    rhs = rhs - np.mean(rhs)
+
+    p = np.zeros((Nx, Ny))
+
+    inv_dx2 = 1.0 / dx**2
+    inv_dy2 = 1.0 / dy**2
+
+    for it in range(max_iter):
+        p_old = p.copy()
+
+        for i in range(Nx):
+            for j in range(Ny):
+
+                neighbor_sum = 0.0
+                diag = 0.0
+
+                if i > 0:
+                    neighbor_sum += p[i - 1, j] * inv_dx2
+                    diag += inv_dx2
+                if i < Nx - 1:
+                    neighbor_sum += p[i + 1, j] * inv_dx2
+                    diag += inv_dx2
+                if j > 0:
+                    neighbor_sum += p[i, j - 1] * inv_dy2
+                    diag += inv_dy2
+                if j < Ny - 1:
+                    neighbor_sum += p[i, j + 1] * inv_dy2
+                    diag += inv_dy2
+
+                p_new = (neighbor_sum - rhs[i, j]) / diag
+
+                # SOR update
+                p[i, j] = p[i, j] + omega * (p_new - p[i, j])
+
+        p -= np.mean(p)
+
+        err = np.max(np.abs(p - p_old))
+
+        if err < tol:
+            if verbose:
+                print(f"SOR converged at iter {it}, err={err:.3e}")
+            break
+
+    return p
+
+
+
 
 # [CORE]
 def project_velocity_mac(u_star, v_star, p, dx, dy, dt):
@@ -152,37 +334,35 @@ def project_velocity_mac(u_star, v_star, p, dx, dy, dt):
 # [CORE]
 def apply_velocity_bc_mac(u, v, U_lid=1.0):
     """
-    BC interpretation:
-    - Top lid velocity is NOT stored directly in the state array.
-    - It is treated as an external boundary condition.
-    - Its effect should enter the domain via diffusion stencil (ghost-like treatment).
+    MAC velocity BC, projection-compatible version.
 
-    This version is consistent with:
-    - diffusion-based predictor (compute_diffusion_predictor_mac)
-    - "momentum gradually diffuses into interior" physics
+    Only enforce normal velocity on true boundary faces:
+    - left/right walls: u = 0
+    - bottom/top walls: v = 0
 
-    Resulting behavior:
-    - Top-adjacent interior row can develop velocity gradually
-    - No artificial jump at top boundary
+    Tangential no-slip is NOT enforced here by overwriting stored values.
+    It should enter through the predictor/diffusion stencil using wall values
+    such as bottom wall u_wall = 0 and top lid u_wall = U_lid.
     """    
-    # u: left/right walls (normal velocity)
+    # normal velocity at left/right walls
     u[0, :] = 0.0
     u[-1, :] = 0.0
 
-    # bottom wall: stationary no-slip-like nearest row
-    u[:, 0] = 0.0
-
-    # IMPORTANT:
-    # do NOT force u[:, -1] = U_lid anymore
-    # top lid influence will enter through diffusion ghost-like treatment
-
-    # v: no penetration on bottom/top
-    v[:, 0] = 0.0
-    v[:, -1] = 0.0
-
-    # minimal side treatment
+    # normal velocity at bottom/top walls
     v[0, :] = 0.0
     v[-1, :] = 0.0
+
+    # # bottom wall: stationary no-slip-like nearest row
+    # u[:, 0] = 0.0
+
+    # # IMPORTANT:
+    # # do NOT force u[:, -1] = U_lid anymore
+    # # top lid influence will enter through diffusion ghost-like treatment
+
+    # # v: no penetration on bottom/top
+    # v[:, 0] = 0.0
+    # v[:, -1] = 0.0
+    
 
     return u, v
 
@@ -470,37 +650,41 @@ def compute_ns_predictor_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
 
 # [CORE]
 def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
-    # enforce BC on current state
+    # 1. enforce BC on current state
     u, v = apply_velocity_bc_mac(u.copy(), v.copy(), U_lid=U_lid)
 
-    # predictor: advection + diffusion
+    # 2. predictor: advection + diffusion
     u_star, v_star = compute_ns_predictor_mac(u, v, dx, dy, dt, nu, U_lid=U_lid)
 
-    # enforce BC again
+    # 3. enforce BC again after predictor
     u_star, v_star = apply_velocity_bc_mac(u_star, v_star, U_lid=U_lid)
 
-    # divergence of predictor
+    # 4. compute divergence of predictor
     div_star = compute_divergence_mac(u_star, v_star, dx, dy)
 
-    # projection (use simple solver for now)
+    # 5. pressure Poisson RHS
     rhs = div_star / dt
+    rhs = rhs - np.mean(rhs)
 
-    # 不要放這印 每step就狂噴 改成存入dict和其他東西一起印
     rhs_max_overall = np.max(np.abs(rhs))
     rhs_max_interior = np.max(np.abs(rhs[1:-1, 1:-1]))
-    #print("max abs rhs overall =", np.max(np.abs(rhs)))
-    #print("max abs rhs interior =", np.max(np.abs(rhs[1:-1, 1:-1])))
 
-    p = solve_poisson_jacobi_center_simple(
-        rhs, dx, dy,
-        max_iter=20000, tol=1e-10,
-        verbose=False
+    # 6. solve pressure with selected Poisson solver
+    p = solve_poisson_sor_mac(
+    rhs, dx, dy, omega=1.7, max_iter=1000, tol=1e-6, verbose=False
     )
 
-    u_new, v_new = project_velocity_mac(u_star, v_star, p, dx, dy, dt)
-    u_new, v_new = apply_velocity_bc_mac(u_new, v_new, U_lid=U_lid)
+    # 7. projection
+    u_proj, v_proj = project_velocity_mac(u_star, v_star, p, dx, dy, dt)
 
-    div_new = compute_divergence_mac(u_new, v_new, dx, dy)
+    # 8. diagnostic: divergence immediately after projection
+    div_proj = compute_divergence_mac(u_proj, v_proj, dx, dy)
+
+    # 9. IMPORTANT: do NOT apply velocity BC after projection for now
+    u_new, v_new = u_proj, v_proj
+    div_new = div_proj
+    #u_new, v_new = apply_velocity_bc_mac(u_proj, v_proj, U_lid=U_lid)
+    #div_new = compute_divergence_mac(u_new, v_new, dx, dy)
 
     return {
         "u_star": u_star,
@@ -509,6 +693,7 @@ def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
         "u_new": u_new,
         "v_new": v_new,
         "div_star": div_star,
+        "div_proj": div_proj,
         "div_new": div_new,
         "rhs_max_overall": rhs_max_overall,
         "rhs_max_interior": rhs_max_interior,
@@ -535,17 +720,19 @@ def run_ns_projection_mac(Nx, Ny, dx, dy, nsteps=50, dt=1e-3, nu=0.1, U_lid=1.0)
             "v_star": results["v_star"].copy(),
             "p": results["p"].copy(),
             "div_star": results["div_star"].copy(),
+            "div_proj": results["div_proj"],
             "div_new": results["div_new"].copy(),
             "rhs_max_overall": results["rhs_max_overall"],  #這兩個 scalar 不需要 .copy()，因為是數字。
             "rhs_max_interior": results["rhs_max_interior"],
         })
 
-        if (step + 1) % 20 == 0:
+        if (step + 1) == 1 or (step + 1) % 20 == 0 or (step + 1) == nsteps:
             print(
                 f"step {step+1:3d} | "
                 f"max|rhs| overall = {results['rhs_max_overall']:.3e} | "
                 f"max|rhs| interior = {results['rhs_max_interior']:.3e} | "
                 f"max|div_star| = {np.max(np.abs(results['div_star'])):.3e} | "
+                f"max|div_proj| = {np.max(np.abs(results['div_proj'])):.3e} | "
                 f"max|div_new| = {np.max(np.abs(results['div_new'])):.3e}"
             )
 
