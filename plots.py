@@ -510,4 +510,54 @@ def plot_projection_dashboard(
     plt.show()
 
 
+def plot_final_velocity(Xp, Yp, u_c, v_c):
+    plt.figure(figsize=(6, 5))
+    plt.quiver(Xp, Yp, u_c, v_c)
+    plt.title("Final velocity field")
+    plt.gca().set_aspect("equal")
+    plt.show()
 
+
+def plot_divergence(Xp, Yp, div, title="Final divergence"):
+    plt.figure(figsize=(6, 5))
+    plt.contourf(Xp, Yp, div, levels=20)
+    plt.colorbar(label=title)
+    plt.title(title)
+    plt.gca().set_aspect("equal")
+    plt.show()
+
+
+def plot_centerline_u(Y, u_sim, ghia, Re=100):
+    plt.figure(figsize=(5, 4))
+    plt.plot(u_sim, Y, marker="o", label="simulation")
+    plt.plot(ghia["u"], ghia["y"], "s", label="Ghia et al. 1982")
+    plt.xlabel("u velocity at x = 0.5")
+    plt.ylabel("y")
+    plt.title(f"Centerline u profile, Re={Re:.0f}")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+
+def plot_centerline_v(X, v_sim, ghia, Re=100):
+    plt.figure(figsize=(5, 4))
+    plt.plot(X, v_sim, marker="o", label="simulation")
+    plt.plot(ghia["x"], ghia["v"], "s", label="Ghia et al. 1982")
+    plt.xlabel("x")
+    plt.ylabel("v velocity at y = 0.5")
+    plt.title(f"Centerline v profile, Re={Re:.0f}")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+
+def plot_grid_convergence(grid_list, u_errors, v_errors):
+    plt.figure(figsize=(5, 4))
+    plt.plot(grid_list, u_errors, "o-", label="u centerline L2 error")
+    plt.plot(grid_list, v_errors, "s-", label="v centerline L2 error")
+    plt.xlabel("Grid size (N)")
+    plt.ylabel("L2 error")
+    plt.title("Grid refinement study (Re=100)")
+    plt.grid(True)
+    plt.legend()
+    plt.show()

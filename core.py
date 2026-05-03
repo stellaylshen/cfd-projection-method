@@ -33,6 +33,28 @@ def setup_mac_grid(Nx, Ny, Lx=1.0, Ly=1.0):
 # =========================================================
 # 2. Operators
 # =========================================================
+
+def face_to_center_velocity(u, v):
+    """
+    Convert MAC face velocities to cell-center velocities
+    u: (Nx+1, Ny)
+    v: (Nx, Ny+1)
+    """
+    u_c = 0.5 * (u[:-1, :] + u[1:, :])
+    v_c = 0.5 * (v[:, :-1] + v[:, 1:])
+    return u_c, v_c
+
+def get_cell_center_coordinates(Nx, Ny, Lx=1.0, Ly=1.0):
+    dx = Lx / Nx
+    dy = Ly / Ny
+
+    x = (np.arange(Nx) + 0.5) * dx
+    y = (np.arange(Ny) + 0.5) * dy
+
+    Xp, Yp = np.meshgrid(x, y, indexing="ij")
+    return Xp, Yp
+
+
 # [CORE]
 def compute_divergence_mac(u, v, dx, dy):
     div = (u[1:, :] - u[:-1, :]) / dx + (v[:, 1:] - v[:, :-1]) / dy
