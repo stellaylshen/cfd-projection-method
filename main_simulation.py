@@ -44,7 +44,7 @@ if __name__ == "__main__":
     print("max |u_center| 3rd row =", np.max(np.abs(u_c[:, -3])))
     print("max |u_center| 4th row =", np.max(np.abs(u_c[:, -4])))
 
-    # Ghia et al. (1982), Re=100
+    # Ghia et al. (1982), Re=100, u velocity along horizontal centerline x = 0.5
     y_ghia = np.array([
         1.0000, 0.9766, 0.9688, 0.9609, 0.9531,
         0.8516, 0.7344, 0.6172, 0.5000,
@@ -57,6 +57,21 @@ if __name__ == "__main__":
         0.23151, 0.00332, -0.13641, -0.20581,
         -0.21090, -0.15662, -0.10150, -0.06434,
         -0.04775, -0.04192, -0.03717, 0.00000
+    ])
+
+    # Ghia et al. (1982), Re=100, v velocity along horizontal centerline y = 0.5
+    x_ghia = np.array([
+        1.0000, 0.9688, 0.9609, 0.9531, 0.9453,
+        0.9063, 0.8594, 0.8047, 0.5000,
+        0.2344, 0.2266, 0.1563, 0.0938,
+        0.0781, 0.0703, 0.0625, 0.0000
+    ])
+
+    v_ghia = np.array([
+        0.00000, -0.05906, -0.07391, -0.08864, -0.10313,
+        -0.16914, -0.22445, -0.24533, 0.05454,
+        0.17527, 0.17507, 0.16077, 0.12317,
+        0.10890, 0.10091, 0.09233, 0.00000
     ])
 
 
@@ -87,5 +102,39 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.legend()
     plt.show()
+
+    # 4) centerline v profile
+    j_mid = Ny // 2
+
+    plt.figure(figsize=(5, 4))
+    plt.plot(Xp[:, j_mid], v_c[:, j_mid], marker="o", label="simulation")
+    plt.plot(x_ghia, v_ghia, "s", label="Ghia et al. 1982")
+    plt.xlabel("x")
+    plt.ylabel("v velocity at y = 0.5")
+    plt.title("Centerline v profile, Re=100")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+
+    # -------------------------------------------------
+    # Quantitative benchmark error
+    # -------------------------------------------------
+
+    # u-profile error: compare simulation u(x=0.5, y) at Ghia y locations
+    u_sim_at_ghia = np.interp(y_ghia, Yp[i_mid, :], u_c[i_mid, :])
+    u_err = u_sim_at_ghia - u_ghia
+
+    print("\n=== Ghia benchmark error: u centerline ===")
+    print("max abs error =", np.max(np.abs(u_err)))
+    print("L2 error      =", np.sqrt(np.mean(u_err**2)))
+
+    # v-profile error: compare simulation v(x, y=0.5) at Ghia x locations
+    v_sim_at_ghia = np.interp(x_ghia, Xp[:, j_mid], v_c[:, j_mid])
+    v_err = v_sim_at_ghia - v_ghia
+
+    print("\n=== Ghia benchmark error: v centerline ===")
+    print("max abs error =", np.max(np.abs(v_err)))
+    print("L2 error      =", np.sqrt(np.mean(v_err**2)))
 
 

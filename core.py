@@ -686,6 +686,11 @@ def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
     #u_new, v_new = apply_velocity_bc_mac(u_proj, v_proj, U_lid=U_lid)
     #div_new = compute_divergence_mac(u_new, v_new, dx, dy)
 
+    # 10. CFL condition
+    umax = np.max(np.abs(u_new))
+    vmax = np.max(np.abs(v_new))
+    cfl = umax * dt / dx + vmax * dt / dy
+
     return {
         "u_star": u_star,
         "v_star": v_star,
@@ -697,6 +702,9 @@ def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
         "div_new": div_new,
         "rhs_max_overall": rhs_max_overall,
         "rhs_max_interior": rhs_max_interior,
+        "cfl": cfl,
+        "umax": umax,
+        "vmax": vmax,
     }
 
 # [CORE]
@@ -724,11 +732,15 @@ def run_ns_projection_mac(Nx, Ny, dx, dy, nsteps=50, dt=1e-3, nu=0.1, U_lid=1.0)
             "div_new": results["div_new"].copy(),
             "rhs_max_overall": results["rhs_max_overall"],  #這兩個 scalar 不需要 .copy()，因為是數字。
             "rhs_max_interior": results["rhs_max_interior"],
+            "cfl": results["cfl"],
+            "umax": results["umax"],
+            "vmax": results["vmax"],
         })
 
-        if (step + 1) == 1 or (step + 1) % 20 == 0 or (step + 1) == nsteps:
+        if (step + 1) == 1 or (step + 1) % 50 == 0 or (step + 1) == nsteps:
             print(
                 f"step {step+1:3d} | "
+                f"CFL = {results['cfl']:.3e} | "
                 f"max|rhs| overall = {results['rhs_max_overall']:.3e} | "
                 f"max|rhs| interior = {results['rhs_max_interior']:.3e} | "
                 f"max|div_star| = {np.max(np.abs(results['div_star'])):.3e} | "
