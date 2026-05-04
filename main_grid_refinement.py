@@ -2,17 +2,20 @@ from core import setup_mac_grid, face_to_center_velocity, run_ns_projection_mac
 from diag import get_ghia_re100_data, compute_ghia_errors
 from plots import plot_grid_convergence
 
-def run_case(N, nsteps=300, dt=5e-3, Re=100.0):
+def run_case(N, nsteps=1000, dt=5e-3, Re=100.0):
     dx, dy, _, _, _, Xp, Yp, _, _, _, _ = setup_mac_grid(N, N)
     nu = 1.0 / Re
 
     history = run_ns_projection_mac(
-        N, N, dx, dy,
-        nsteps=nsteps,
-        dt=dt,
-        nu=nu,
-        U_lid=1.0,
-    )
+    N, N, dx, dy,
+    nsteps=nsteps,
+    dt=dt,
+    nu=nu,
+    U_lid=1.0,
+    steady_tol=1e-5,
+    min_steps=100,
+    print_every=100,
+)
 
     final = history[-1]
     u_c, v_c = face_to_center_velocity(final["u"], final["v"])
@@ -29,8 +32,9 @@ if __name__ == "__main__":
     v_errors = []
 
     for N in grid_list:
-        print(f"\nRunning N = {N} ...")
-        errors = run_case(N)
+        nsteps = 1000 if N <= 41 else 1500
+        print(f"\nRunning N = {N}, nsteps = {nsteps} ...")
+        errors = run_case(N, nsteps=nsteps)
 
         print(f"u_L2 = {errors['u_L2']:.4f}, v_L2 = {errors['v_L2']:.4f}")
 

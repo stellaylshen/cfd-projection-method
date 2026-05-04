@@ -703,10 +703,10 @@ def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
     div_proj = compute_divergence_mac(u_proj, v_proj, dx, dy)
 
     # 9. IMPORTANT: do NOT apply velocity BC after projection for now
-    u_new, v_new = u_proj, v_proj
-    div_new = div_proj
     #u_new, v_new = apply_velocity_bc_mac(u_proj, v_proj, U_lid=U_lid)
     #div_new = compute_divergence_mac(u_new, v_new, dx, dy)
+    u_new, v_new = u_proj, v_proj
+    div_new = div_proj
 
     # 10. CFL condition
     umax = np.max(np.abs(u_new))
@@ -730,17 +730,40 @@ def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
     }
 
 # [CORE]
-def run_ns_projection_mac(Nx, Ny, dx, dy, nsteps=50, dt=1e-3, nu=0.1, U_lid=1.0):
+def run_ns_projection_mac(
+    Nx, Ny, dx, dy,
+    nsteps=50,
+    dt=1e-3,
+    nu=0.1,
+    U_lid=1.0,
+    steady_tol=None,
+    min_steps=50,
+    print_every=50,
+):
     u = np.zeros((Nx + 1, Ny))
     v = np.zeros((Nx, Ny + 1))
 
     history = []
 
     for step in range(nsteps):
+        u_old = u.copy()
+        
+        v_old = v.copy()
         results = step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=U_lid)
 
         u = results["u_new"]
         v = results["v_new"]
+
+        # --- steady-state monitor ---
+        velocity_change = max(
+            np.max(np.abs(u - u_old)),
+            np.max(np.abs(v - v_old))
+        )
+
+        if steady_tol is not None and (step + 1) >= min_steps:
+            if velocity_change < steady_tol:
+                print(f"Converged at step {step+1}, vel_change = {velocity_change:.3e}")
+                break
 
         history.append({
             "step": step + 1,
@@ -750,19 +773,21 @@ def run_ns_projection_mac(Nx, Ny, dx, dy, nsteps=50, dt=1e-3, nu=0.1, U_lid=1.0)
             "v_star": results["v_star"].copy(),
             "p": results["p"].copy(),
             "div_star": results["div_star"].copy(),
-            "div_proj": results["div_proj"],
+            "div_proj": results["div_proj"].copy(),
             "div_new": results["div_new"].copy(),
-            "rhs_max_overall": results["rhs_max_overall"],  #這兩個 scalar 不需要 .copy()，因為是數字。
+            "velocity_change": velocity_change,     # scalar value, 不用 .copy()。
+            "rhs_max_overall": results["rhs_max_overall"],  
             "rhs_max_interior": results["rhs_max_interior"],
             "cfl": results["cfl"],
             "umax": results["umax"],
             "vmax": results["vmax"],
         })
 
-        if (step + 1) == 1 or (step + 1) % 50 == 0 or (step + 1) == nsteps:
+        if (step + 1) == 1 or (step + 1) % print_every == 0 or (step + 1) == nsteps:
             print(
-                f"step {step+1:3d} | "
+                f"step {step+1:4d} | "
                 f"CFL = {results['cfl']:.3e} | "
+                f"vel_change = {velocity_change:.3e} | "
                 f"max|rhs| overall = {results['rhs_max_overall']:.3e} | "
                 f"max|rhs| interior = {results['rhs_max_interior']:.3e} | "
                 f"max|div_star| = {np.max(np.abs(results['div_star'])):.3e} | "
