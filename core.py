@@ -371,8 +371,8 @@ def apply_velocity_bc_mac(u, v, U_lid=1.0):
     u[-1, :] = 0.0
 
     # normal velocity at bottom/top walls
-    v[0, :] = 0.0
-    v[-1, :] = 0.0
+    v[:, 0] = 0.0
+    v[:,-1] = 0.0
 
     # # bottom wall: stationary no-slip-like nearest row
     # u[:, 0] = 0.0
@@ -671,7 +671,7 @@ def compute_ns_predictor_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
     return u_star, v_star
 
 # [CORE]
-def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
+def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0, bc_mode="A"):
     # 1. enforce BC on current state
     u, v = apply_velocity_bc_mac(u.copy(), v.copy(), U_lid=U_lid)
 
@@ -705,8 +705,29 @@ def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
     # 9. IMPORTANT: do NOT apply velocity BC after projection for now
     #u_new, v_new = apply_velocity_bc_mac(u_proj, v_proj, U_lid=U_lid)
     #div_new = compute_divergence_mac(u_new, v_new, dx, dy)
-    u_new, v_new = u_proj, v_proj
-    div_new = div_proj
+
+    #u_new, v_new = u_proj, v_proj
+    #? div_new = div_proj
+
+    # BC test (A/B/C)
+    if bc_mode == "A":
+        # 目前版本：projection 後完全不套 BC
+        u_new, v_new = u_proj, v_proj
+
+    elif bc_mode == "B":
+        # projection 後套 full stored BC
+        u_new, v_new = apply_velocity_bc_mac_ns(
+            u_proj, v_proj, U_lid=U_lid
+        )
+
+    elif bc_mode == "C":
+        # projection 後只套 normal-only BC
+        u_new, v_new = apply_velocity_bc_mac(
+            u_proj, v_proj, U_lid=U_lid
+        )
+
+    div_new = compute_divergence_mac(u_new, v_new, dx, dy)
+
 
     # 10. CFL condition
     umax = np.max(np.abs(u_new))
@@ -739,6 +760,7 @@ def run_ns_projection_mac(
     steady_tol=None,
     min_steps=50,
     print_every=50,
+    bc_mode="A",
 ):
     u = np.zeros((Nx + 1, Ny))
     v = np.zeros((Nx, Ny + 1))
@@ -749,7 +771,7 @@ def run_ns_projection_mac(
         u_old = u.copy()
         
         v_old = v.copy()
-        results = step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=U_lid)
+        results = step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=U_lid, bc_mode=bc_mode)
 
         u = results["u_new"]
         v = results["v_new"]
