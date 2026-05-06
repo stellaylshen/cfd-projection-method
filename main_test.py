@@ -186,13 +186,15 @@ if __name__ == "__main__":
     print("max |u_c_corr| =", abs(u_c_corr).max())
     print("max |v_c_corr| =", abs(v_c_corr).max())
 
-    
+    # -------------------------------------------------
+    # Diffusion-Only somke test
+    # -------------------------------------------------
     print("\n=== Ghost runner smoke test ===")
 
     history = run_ns_projection_mac_ghost(
         Nx=5, Ny=5,
         dx=dx, dy=dy,
-        nsteps=10,
+        nsteps=20,
         dt=5e-3,
         nu=0.01,
         U_lid=1.0,
@@ -204,3 +206,4 @@ if __name__ == "__main__":
     print("final max |div_new| =", abs(final["div_new"]).max())
     print("final umax =", final["umax"])
     print("final vmax =", final["vmax"])
+

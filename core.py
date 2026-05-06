@@ -883,6 +883,88 @@ def compute_ns_predictor_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
 
     return u_star, v_star
 
+# [GHOST CELL]
+def compute_ns_predictor_mac_ghost(u, v, dx, dy, dt, nu, U_lid=1.0):
+    """
+    Full NS predictor for ghost-cell MAC grid.
+
+    Includes:
+    - advection
+    - diffusion
+
+    Returns:
+        u_star, v_star
+    """
+
+    u = u.copy()
+    v = v.copy()
+
+    u, v = apply_velocity_bc_mac_ghost(u, v, U_lid=U_lid)
+
+    u_star = u.copy()
+    v_star = v.copy()
+
+    # =================================================
+    # u equation
+    # =================================================
+    u_c = 0.5 * (u[1:-1, 1:-1] + u[2:, 1:-1])
+
+    v_on_u = 0.25 * (
+        v[1:-2, :-1] + v[2:-1, :-1]
+        + v[1:-2, 1:] + v[2:-1, 1:]
+    )
+
+    du_dx = (u[2:, 1:-1] - u[:-2, 1:-1]) / (2.0 * dx)
+    du_dy = (u[1:-1, 2:] - u[1:-1, :-2]) / (2.0 * dy)
+
+    adv_u = u_c * du_dx + v_on_u * du_dy
+
+    lap_u = (
+        (u[2:, 1:-1] - 2.0*u[1:-1, 1:-1] + u[:-2, 1:-1]) / dx**2
+        +
+        (u[1:-1, 2:] - 2.0*u[1:-1, 1:-1] + u[1:-1, :-2]) / dy**2
+    )
+
+    u_star[1:-1, 1:-1] = (
+        u[1:-1, 1:-1]
+        - dt * adv_u
+        + nu * dt * lap_u
+    )
+
+    # =================================================
+    # v equation
+    # =================================================
+    v_c = 0.5 * (v[1:-1, 1:-1] + v[1:-1, 2:])
+
+    u_on_v = 0.25 * (
+        u[:-1, 1:-2] + u[:-1, 2:-1]
+        + u[1:, 1:-2] + u[1:, 2:-1]
+    )
+
+    dv_dx = (v[2:, 1:-1] - v[:-2, 1:-1]) / (2.0 * dx)
+    dv_dy = (v[1:-1, 2:] - v[1:-1, :-2]) / (2.0 * dy)
+
+    adv_v = u_on_v * dv_dx + v_c * dv_dy
+
+    lap_v = (
+        (v[2:, 1:-1] - 2.0*v[1:-1, 1:-1] + v[:-2, 1:-1]) / dx**2
+        +
+        (v[1:-1, 2:] - 2.0*v[1:-1, 1:-1] + v[1:-1, :-2]) / dy**2
+    )
+
+    v_star[1:-1, 1:-1] = (
+        v[1:-1, 1:-1]
+        - dt * adv_v
+        + nu * dt * lap_v
+    )
+
+    u_star, v_star = apply_velocity_bc_mac_ghost(
+        u_star, v_star, U_lid=U_lid
+    )
+
+    return u_star, v_star
+
+
 # [CORE]
 def step_ns_projection_mac(u, v, dx, dy, dt, nu, U_lid=1.0, bc_mode="A"):
     # 1. enforce BC on current state
@@ -1037,8 +1119,8 @@ def step_ns_projection_mac_ghost(u, v, dx, dy, dt, nu, U_lid=1.0):
     # 1. enforce ghost BC on current state
     u, v = apply_velocity_bc_mac_ghost(u.copy(), v.copy(), U_lid=U_lid)
 
-    # 2. predictor: diffusion only for now
-    u_star, v_star = compute_diffusion_predictor_mac_ghost(
+    # 2. predictor: diffusion-only or diffusion + advection
+    u_star, v_star = compute_ns_predictor_mac_ghost(
         u, v, dx, dy, dt, nu, U_lid=U_lid
     )
 
