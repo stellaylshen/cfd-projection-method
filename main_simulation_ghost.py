@@ -8,14 +8,21 @@ from core import (
 
 from plots import (
     plot_final_velocity,
+    plot_centerline_u, 
+    plot_centerline_v,
+)
+
+from diag import (
+    get_ghia_re100_data,
+    compute_ghia_errors,
 )
 
 # -------------------------------------------------
 # Simulation parameters
 # -------------------------------------------------
 
-Nx = 21
-Ny = 21
+Nx = 41
+Ny = 41
 
 Re = 100.0
 nu = 1.0 / Re
@@ -55,6 +62,19 @@ u_c, v_c = face_to_center_velocity_ghost(
     final["u"],
     final["v"],
 )
+# -------------------------------------------------
+# Ghia benchmark comparison
+# -------------------------------------------------
+
+ghia = get_ghia_re100_data()
+
+errors = compute_ghia_errors(u_c, v_c, Xp, Yp, ghia)
+
+print("\n=== Ghia Benchmark ===")
+print(f"u_L2 = {errors['u_L2']:.4f}")
+print(f"v_L2 = {errors['v_L2']:.4f}")
+print(f"u_max = {errors['u_max']:.4f}")
+print(f"v_max = {errors['v_max']:.4f}")
 
 # -------------------------------------------------
 # Diagnostics
@@ -92,3 +112,9 @@ plot_final_velocity(
     u_c,
     v_c,
 )
+
+i_mid = Nx // 2
+j_mid = Ny // 2
+
+plot_centerline_u(Yp[i_mid, :], u_c[i_mid, :], ghia, Re)
+plot_centerline_v(Xp[:, j_mid], v_c[:, j_mid], ghia, Re)
