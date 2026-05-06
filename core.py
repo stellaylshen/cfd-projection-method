@@ -1032,9 +1032,141 @@ def run_ns_projection_mac(
 
     return history
 
+# [GHOST CELL]
+def step_ns_projection_mac_ghost(u, v, dx, dy, dt, nu, U_lid=1.0):
+    # 1. enforce ghost BC on current state
+    u, v = apply_velocity_bc_mac_ghost(u.copy(), v.copy(), U_lid=U_lid)
 
+    # 2. predictor: diffusion only for now
+    u_star, v_star = compute_diffusion_predictor_mac_ghost(
+        u, v, dx, dy, dt, nu, U_lid=U_lid
+    )
 
+    # 3. divergence of predictor
+    div_star = compute_divergence_mac_ghost(u_star, v_star, dx, dy)
 
+    # 4. pressure Poisson RHS
+    rhs = div_star / dt
+    rhs = rhs - np.mean(rhs)
 
+    rhs_max_overall = np.max(np.abs(rhs))
+    rhs_max_interior = np.max(np.abs(rhs[1:-1, 1:-1]))
+
+    # 5. solve pressure
+    p = solve_poisson_sor_mac(
+        rhs, dx, dy,
+        omega=1.7,
+        max_iter=1000,
+        tol=1e-6,
+        verbose=False,
+    )
+
+    # 6. projection
+    u_proj, v_proj = project_velocity_mac_ghost(
+        u_star, v_star, p, dx, dy, dt
+    )
+
+    # 7. re-apply ghost BC after projection
+    u_new, v_new = apply_velocity_bc_mac_ghost(
+        u_proj, v_proj, U_lid=U_lid
+    )
+
+    # 8. diagnostics
+    div_proj = compute_divergence_mac_ghost(u_proj, v_proj, dx, dy)
+    div_new = compute_divergence_mac_ghost(u_new, v_new, dx, dy)
+
+    umax = np.max(np.abs(u_new[:, 1:-1]))
+    vmax = np.max(np.abs(v_new[1:-1, :]))
+    cfl = umax * dt / dx + vmax * dt / dy
+
+    return {
+        "u_star": u_star,
+        "v_star": v_star,
+        "p": p,
+        "u_new": u_new,
+        "v_new": v_new,
+        "div_star": div_star,
+        "div_proj": div_proj,
+        "div_new": div_new,
+        "rhs_max_overall": rhs_max_overall,
+        "rhs_max_interior": rhs_max_interior,
+        "cfl": cfl,
+        "umax": umax,
+        "vmax": vmax,
+    }
+
+# [GHOST CELL]
+def run_ns_projection_mac_ghost(
+    Nx, Ny, dx, dy,
+    nsteps=50,
+    dt=1e-3,
+    nu=0.1,
+    U_lid=1.0,
+    steady_tol=None,
+    min_steps=50,
+    print_every=50,
+):
+    u = np.zeros((Nx + 1, Ny + 2))
+    v = np.zeros((Nx + 2, Ny + 1))
+
+    u, v = apply_velocity_bc_mac_ghost(u, v, U_lid=U_lid)
+
+    history = []
+
+    for step in range(nsteps):
+        u_old = u.copy()
+        v_old = v.copy()
+
+        results = step_ns_projection_mac_ghost(
+            u, v, dx, dy, dt, nu, U_lid=U_lid
+        )
+
+        u = results["u_new"]
+        v = results["v_new"]
+
+        velocity_change = max(
+            np.max(np.abs(u[:, 1:-1] - u_old[:, 1:-1])),
+            np.max(np.abs(v[1:-1, :] - v_old[1:-1, :])),
+        )
+
+        history.append({
+            "step": step + 1,
+            "u": u.copy(),
+            "v": v.copy(),
+            "u_star": results["u_star"].copy(),
+            "v_star": results["v_star"].copy(),
+            "p": results["p"].copy(),
+            "div_star": results["div_star"].copy(),
+            "div_proj": results["div_proj"].copy(),
+            "div_new": results["div_new"].copy(),
+            "velocity_change": velocity_change,
+            "rhs_max_overall": results["rhs_max_overall"],
+            "rhs_max_interior": results["rhs_max_interior"],
+            "cfl": results["cfl"],
+            "umax": results["umax"],
+            "vmax": results["vmax"],
+        })
+
+        if steady_tol is not None and (step + 1) >= min_steps:
+            if velocity_change < steady_tol:
+                print(
+                    f"Converged at step {step+1}, "
+                    f"vel_change = {velocity_change:.3e}"
+                )
+                break
+
+        if (step + 1) == 1 or (step + 1) % print_every == 0 or (step + 1) == nsteps:
+            print(
+                f"step {step+1:4d} | "
+                f"CFL = {results['cfl']:.3e} | "
+                f"vel_change = {velocity_change:.3e} | "
+                f"max|rhs| overall = {results['rhs_max_overall']:.3e} | "
+                f"max|rhs| interior = {results['rhs_max_interior']:.3e} | "
+                f"max|div_star| = {np.max(np.abs(results['div_star'])):.3e} | "
+                f"max|div_proj| = {np.max(np.abs(results['div_proj'])):.3e} | "
+                f"max|div_new| = {np.max(np.abs(results['div_new'])):.3e}"
+            )
+
+    return history
 
 

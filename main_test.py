@@ -12,6 +12,7 @@ from core import (
     face_to_center_velocity_ghost,
     compute_diffusion_predictor_mac_ghost,
     solve_poisson_sor_mac,
+    run_ns_projection_mac_ghost,
 )
 from test import (
     test_divergence,
@@ -184,3 +185,22 @@ if __name__ == "__main__":
 
     print("max |u_c_corr| =", abs(u_c_corr).max())
     print("max |v_c_corr| =", abs(v_c_corr).max())
+
+    
+    print("\n=== Ghost runner smoke test ===")
+
+    history = run_ns_projection_mac_ghost(
+        Nx=5, Ny=5,
+        dx=dx, dy=dy,
+        nsteps=10,
+        dt=5e-3,
+        nu=0.01,
+        U_lid=1.0,
+        print_every=1,
+    )
+
+    final = history[-1]
+
+    print("final max |div_new| =", abs(final["div_new"]).max())
+    print("final umax =", final["umax"])
+    print("final vmax =", final["vmax"])
