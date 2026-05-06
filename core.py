@@ -11,8 +11,8 @@ def setup_mac_grid(Nx, Ny, Lx=1.0, Ly=1.0):
 
     # variables
     p = np.zeros((Nx, Ny))          # cell center
-    u = np.zeros((Nx + 1, Ny))      # vertical faces
-    v = np.zeros((Nx, Ny + 1))      # horizontal faces
+    u = np.zeros((Nx + 1, Ny))      # vertical u faces 
+    v = np.zeros((Nx, Ny + 1))      # horizontal v faces 
 
     # coordinates (for debug / visualization)
     x_p = (np.arange(Nx) + 0.5) * dx
@@ -29,6 +29,30 @@ def setup_mac_grid(Nx, Ny, Lx=1.0, Ly=1.0):
 
     return dx, dy, p, u, v, Xp, Yp, Xu, Yu, Xv, Yv
 
+# [GHOST CELL]
+def setup_mac_grid_ghost(Nx, Ny, Lx=1.0, Ly=1.0):
+    dx = Lx / Nx
+    dy = Ly / Ny
+
+    # variables
+    p = np.zeros((Nx, Ny))              # cell center
+    u = np.zeros((Nx + 1, Ny + 2))      # vertical u faces + bottom/top ghost
+    v = np.zeros((Nx + 2 , Ny + 1))      # horizontal v faces + left/right ghost
+
+    # coordinates (for debug / visualization)
+    x_p = (np.arange(Nx) + 0.5) * dx
+    y_p = (np.arange(Ny) + 0.5) * dy
+    Xp, Yp = np.meshgrid(x_p, y_p, indexing="ij")
+
+    x_u = np.arange(Nx + 1) * dx
+    y_u = (np.arange(Ny) + 0.5) * dy
+    Xu, Yu = np.meshgrid(x_u, y_u, indexing="ij")
+
+    x_v = (np.arange(Nx) + 0.5) * dx
+    y_v = np.arange(Ny + 1) * dy
+    Xv, Yv = np.meshgrid(x_v, y_v, indexing="ij")
+
+    return dx, dy, p, u, v, Xp, Yp, Xu, Yu, Xv, Yv
 
 # =========================================================
 # 2. Operators
@@ -54,10 +78,50 @@ def get_cell_center_coordinates(Nx, Ny, Lx=1.0, Ly=1.0):
     Xp, Yp = np.meshgrid(x, y, indexing="ij")
     return Xp, Yp
 
+# [GHOST CELL]
+def face_to_center_velocity_ghost(u, v):
+    """
+    Convert ghost-cell MAC velocities to cell-center velocities.
+
+    u shape: (Nx+1, Ny+2)
+        physical u: u[:, 1:-1]
+
+    v shape: (Nx+2, Ny+1)
+        physical v: v[1:-1, :]
+    """
+
+    u_phys = u[:, 1:-1]
+    v_phys = v[1:-1, :]
+
+    u_c = 0.5 * (u_phys[:-1, :] + u_phys[1:, :])
+    v_c = 0.5 * (v_phys[:, :-1] + v_phys[:, 1:])
+
+    return u_c, v_c
 
 # [CORE]
 def compute_divergence_mac(u, v, dx, dy):
     div = (u[1:, :] - u[:-1, :]) / dx + (v[:, 1:] - v[:, :-1]) / dy
+    return div
+
+# [GHOST CELL]
+def compute_divergence_mac_ghost(u, v, dx, dy):
+    """
+    Compute divergence on pressure cells for ghost-cell MAC layout.
+
+    u shape: (Nx+1, Ny+2)
+        physical u faces: u[:, 1:-1]
+
+    v shape: (Nx+2, Ny+1)
+        physical v faces: v[1:-1, :]
+
+    output div shape: (Nx, Ny)
+    """
+
+    div = (
+        (u[1:, 1:-1] - u[:-1, 1:-1]) / dx
+        +
+        (v[1:-1, 1:] - v[1:-1, :-1]) / dy
+    )
     return div
 
 # [CORE]
@@ -72,6 +136,35 @@ def compute_pressure_gradient_mac(p, dx, dy):
 
     # interior v-faces
     dpdy_v[:, 1:Ny] = (p[:, 1:] - p[:, :-1]) / dy
+
+    return dpdx_u, dpdy_v
+
+# [GHOST CELL]
+def compute_pressure_gradient_mac_ghost(p, dx, dy):
+    """
+    Pressure gradient for ghost-cell MAC layout.
+
+    p shape: (Nx, Ny)
+
+    returns:
+        dpdx_u shape: (Nx+1, Ny+2)
+        dpdy_v shape: (Nx+2, Ny+1)
+
+    Only physical interior faces are filled.
+    Ghost/boundary-adjacent unused entries stay zero.
+    """
+    Nx, Ny = p.shape
+
+    dpdx_u = np.zeros((Nx + 1, Ny + 2))
+    dpdy_v = np.zeros((Nx + 2, Ny + 1))
+
+    # u physical faces, excluding left/right boundary faces
+    # p difference across vertical faces
+    dpdx_u[1:Nx, 1:-1] = (p[1:, :] - p[:-1, :]) / dx
+
+    # v physical faces, excluding bottom/top boundary faces
+    # p difference across horizontal faces
+    dpdy_v[1:-1, 1:Ny] = (p[:, 1:] - p[:, :-1]) / dy
 
     return dpdx_u, dpdy_v
 
@@ -336,9 +429,6 @@ def solve_poisson_sor_mac(
 
     return p
 
-
-
-
 # [CORE]
 def project_velocity_mac(u_star, v_star, p, dx, dy, dt):
     dpdx_u, dpdy_v = compute_pressure_gradient_mac(p, dx, dy)
@@ -349,6 +439,34 @@ def project_velocity_mac(u_star, v_star, p, dx, dy, dt):
     # correct interior faces only
     u_new[1:-1, :] = u_star[1:-1, :] - dt * dpdx_u[1:-1, :]
     v_new[:, 1:-1] = v_star[:, 1:-1] - dt * dpdy_v[:, 1:-1]
+
+    return u_new, v_new
+
+# [GHOST CELL]
+def project_velocity_mac_ghost(u_star, v_star, p, dx, dy, dt):
+    """
+    Projection step for ghost-cell MAC layout.
+
+    u_star shape: (Nx+1, Ny+2)
+    v_star shape: (Nx+2, Ny+1)
+    p shape:      (Nx, Ny)
+
+    Projection only corrects physical interior faces.
+    Ghost cells and true boundary-normal faces are not modified.
+    """
+
+    dpdx_u, dpdy_v = compute_pressure_gradient_mac_ghost(p, dx, dy)
+
+    u_new = u_star.copy()
+    v_new = v_star.copy()
+
+    # u physical interior faces only:
+    # exclude left/right boundary faces and bottom/top ghost
+    u_new[1:-1, 1:-1] = u_star[1:-1, 1:-1] - dt * dpdx_u[1:-1, 1:-1]
+
+    # v physical interior faces only:
+    # exclude left/right ghost and bottom/top boundary faces
+    v_new[1:-1, 1:-1] = v_star[1:-1, 1:-1] - dt * dpdy_v[1:-1, 1:-1]
 
     return u_new, v_new
 
@@ -427,6 +545,65 @@ def apply_velocity_bc_mac_ns(u, v, U_lid=1.0):
     v[-1, :] = 0.0
 
     return u, v
+
+# [GHOST CELL]
+def apply_velocity_bc_mac_ghost(u, v, U_lid=1.0):
+    """
+    Ghost-cell MAC velocity BC.
+
+    u shape: (Nx+1, Ny+2)
+        physical u values are u[:, 1:-1]
+        bottom ghost: u[:, 0]
+        top ghost:    u[:, -1]
+
+    v shape: (Nx+2, Ny+1)
+        physical v values are v[1:-1, :]
+        left ghost:  v[0, :]
+        right ghost: v[-1, :]
+    """
+
+    # -------------------------------------------------
+    # u velocity
+    # -------------------------------------------------
+
+    # left/right walls: normal velocity u = 0
+    u[0, :] = 0.0
+    u[-1, :] = 0.0
+
+    # bottom wall: tangential no-slip u_wall = 0
+    # wall value is midpoint between ghost and first physical u row:
+    # (u_ghost + u_first) / 2 = 0
+    u[:, 0] = -u[:, 1]
+
+    # top moving lid: tangential wall velocity = U_lid
+    # (u_top_physical + u_top_ghost) / 2 = U_lid
+    u[:, -1] = 2.0 * U_lid - u[:, -2]
+
+    # corners / side walls win
+    u[0, :] = 0.0
+    u[-1, :] = 0.0
+
+    # -------------------------------------------------
+    # v velocity
+    # -------------------------------------------------
+
+    # bottom/top walls: normal velocity v = 0
+    v[:, 0] = 0.0
+    v[:, -1] = 0.0
+
+    # left wall: tangential no-slip v_wall = 0
+    v[0, :] = -v[1, :]
+
+    # right wall: tangential no-slip v_wall = 0
+    v[-1, :] = -v[-2, :]
+
+    # corners / bottom-top normal condition wins
+    v[:, 0] = 0.0
+    v[:, -1] = 0.0
+
+    return u, v
+
+
 
 # [CORE]
 def apply_pressure_bc_neumann_from_predictor(p, u_star, v_star, dx, dy, dt):
@@ -526,6 +703,42 @@ def compute_diffusion_predictor_mac(u, v, dx, dy, dt, nu, U_lid=1.0):
     v_star[:, -1] = 0.0
     v_star[0, :] = 0.0
     v_star[-1, :] = 0.0
+
+    return u_star, v_star
+
+# [GHOST CELL]
+def compute_diffusion_predictor_mac_ghost(u, v, dx, dy, dt, nu, U_lid=1.0):
+    u = u.copy()
+    v = v.copy()
+
+    u, v = apply_velocity_bc_mac_ghost(u, v, U_lid=U_lid)
+
+    u_star = u.copy()
+    v_star = v.copy()
+
+    # u physical interior faces:
+    # x interior faces: 1:-1
+    # y physical rows: 1:-1
+    lap_u = (
+        (u[2:, 1:-1] - 2.0*u[1:-1, 1:-1] + u[:-2, 1:-1]) / dx**2
+        +
+        (u[1:-1, 2:] - 2.0*u[1:-1, 1:-1] + u[1:-1, :-2]) / dy**2
+    )
+
+    u_star[1:-1, 1:-1] = u[1:-1, 1:-1] + nu * dt * lap_u
+
+    # v physical interior faces:
+    # x physical rows: 1:-1
+    # y interior faces: 1:-1
+    lap_v = (
+        (v[2:, 1:-1] - 2.0*v[1:-1, 1:-1] + v[:-2, 1:-1]) / dx**2
+        +
+        (v[1:-1, 2:] - 2.0*v[1:-1, 1:-1] + v[1:-1, :-2]) / dy**2
+    )
+
+    v_star[1:-1, 1:-1] = v[1:-1, 1:-1] + nu * dt * lap_v
+
+    u_star, v_star = apply_velocity_bc_mac_ghost(u_star, v_star, U_lid=U_lid)
 
     return u_star, v_star
 
@@ -818,3 +1031,10 @@ def run_ns_projection_mac(
             )
 
     return history
+
+
+
+
+
+
+
