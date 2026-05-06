@@ -187,7 +187,7 @@ if __name__ == "__main__":
     print("max |v_c_corr| =", abs(v_c_corr).max())
 
     # -------------------------------------------------
-    # Diffusion-Only somke test
+    # somke test
     # -------------------------------------------------
     print("\n=== Ghost runner smoke test ===")
 
