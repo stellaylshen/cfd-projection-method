@@ -10,6 +10,8 @@ from plots import (
     plot_final_velocity,
     plot_centerline_u, 
     plot_centerline_v,
+    plot_streamlines,
+    animate_velocity_field_pretty,
 )
 
 from diag import (
@@ -20,26 +22,23 @@ from diag import (
 # -------------------------------------------------
 # Simulation parameters
 # -------------------------------------------------
-
-Nx = 41
-Ny = 41
+Nx = 51
+Ny = 51
 
 Re = 100.0
 nu = 1.0 / Re
 
 dt = 5e-3
-nsteps = 2000
+nsteps = 200
 
 # -------------------------------------------------
 # Setup grid
 # -------------------------------------------------
-
 dx, dy, p, u, v, Xp, Yp, Xu, Yu, Xv, Yv = setup_mac_grid_ghost(Nx, Ny)
 
 # -------------------------------------------------
 # Run simulation
 # -------------------------------------------------
-
 history = run_ns_projection_mac_ghost(
     Nx, Ny,
     dx, dy,
@@ -57,7 +56,6 @@ final = history[-1]
 # -------------------------------------------------
 # Convert to cell-center velocity
 # -------------------------------------------------
-
 u_c, v_c = face_to_center_velocity_ghost(
     final["u"],
     final["v"],
@@ -65,7 +63,6 @@ u_c, v_c = face_to_center_velocity_ghost(
 # -------------------------------------------------
 # Ghia benchmark comparison
 # -------------------------------------------------
-
 ghia = get_ghia_re100_data()
 
 errors = compute_ghia_errors(u_c, v_c, Xp, Yp, ghia)
@@ -79,7 +76,6 @@ print(f"v_max = {errors['v_max']:.4f}")
 # -------------------------------------------------
 # Diagnostics
 # -------------------------------------------------
-
 print("\n=== Final Diagnostics ===")
 
 print(
@@ -105,7 +101,6 @@ print(
 # -------------------------------------------------
 # Plot
 # -------------------------------------------------
-
 plot_final_velocity(
     Xp,
     Yp,
@@ -118,3 +113,14 @@ j_mid = Ny // 2
 
 plot_centerline_u(Yp[i_mid, :], u_c[i_mid, :], ghia, Re)
 plot_centerline_v(Xp[:, j_mid], v_c[:, j_mid], ghia, Re)
+
+plot_streamlines(Xp, Yp, u_c, v_c, Re)
+
+anim = animate_velocity_field_pretty(
+    history,
+    Xp,
+    Yp,
+    face_to_center_velocity_ghost,
+    skip=20,
+)
+#anim.save("velocity_evolution.gif", writer="pillow", fps=10)

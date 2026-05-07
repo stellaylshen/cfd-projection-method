@@ -561,3 +561,137 @@ def plot_grid_convergence(grid_list, u_errors, v_errors):
     plt.grid(True)
     plt.legend()
     plt.show()
+
+def plot_grid_convergence_loglog(grid_list, u_errors, v_errors):
+    h = 1.0 / np.array(grid_list)
+
+    plt.figure(figsize=(6, 5))
+
+    plt.loglog(h, u_errors, 'o-', label='u_L2')
+    plt.loglog(h, v_errors, 's-', label='v_L2')
+
+    plt.xlabel("Grid spacing h")
+    plt.ylabel("L2 error")
+    plt.title("Grid Convergence (log-log)")
+    plt.grid(True)
+    plt.legend()
+
+    plt.show()
+
+def plot_streamlines(Xp, Yp, u_c, v_c, Re):
+    plt.figure(figsize=(6, 5))
+
+    plt.streamplot(
+        Xp.T,
+        Yp.T,
+        u_c.T,
+        v_c.T,
+        density=1.2,
+        linewidth=1.0,
+        arrowsize=1.0,
+    )
+
+    plt.title(f"Streamlines (Re={Re:.0f})")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.axis("equal")
+
+    plt.show()
+
+def animate_velocity_field_ghost(history, Xp, Yp, face_to_center_func, skip=20):
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    first = history[0]
+    u_c, v_c = face_to_center_func(first["u"], first["v"])
+
+    q = ax.quiver(Xp, Yp, u_c, v_c)
+    ax.set_aspect("equal")
+    ax.set_title("Velocity field evolution")
+
+    def update(frame_idx):
+        frame = history[frame_idx]
+        u_c, v_c = face_to_center_func(frame["u"], frame["v"])
+        q.set_UVC(u_c, v_c)
+        ax.set_title(f"Velocity field evolution | step {frame['step']}")
+        return q,
+
+    frames = range(0, len(history), skip)
+
+    anim = FuncAnimation(
+        fig,
+        update,
+        frames=frames,
+        interval=100,
+        blit=False,
+    )
+
+    plt.show()
+    return anim
+
+def animate_velocity_field_pretty(history, Xp, Yp, face_to_center_func, skip=20):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    # downsample arrows
+    stride = max(1, Xp.shape[0] // 20)
+
+    def get_frame_data(frame):
+        u_c, v_c = face_to_center_func(frame["u"], frame["v"])
+        speed = np.sqrt(u_c**2 + v_c**2)
+        return u_c, v_c, speed
+
+    u_c, v_c, speed = get_frame_data(history[0])
+
+    contour = ax.contourf(Xp, Yp, speed, levels=30)
+    q = ax.quiver(
+        Xp[::stride, ::stride],
+        Yp[::stride, ::stride],
+        u_c[::stride, ::stride],
+        v_c[::stride, ::stride],
+        scale=12,
+        width=0.003,
+    )
+
+    fig.colorbar(contour, ax=ax, label="velocity magnitude")
+    ax.set_aspect("equal")
+
+    def update(frame_idx):
+        ax.clear()
+
+        frame = history[frame_idx]
+        u_c, v_c, speed = get_frame_data(frame)
+
+        ax.contourf(Xp, Yp, speed, levels=30)
+        ax.quiver(
+            Xp[::stride, ::stride],
+            Yp[::stride, ::stride],
+            u_c[::stride, ::stride],
+            v_c[::stride, ::stride],
+            scale=12,
+            width=0.003,
+        )
+
+        ax.set_title(f"Velocity magnitude and field | step {frame['step']}")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_aspect("equal")
+
+    frames = range(0, len(history), skip)
+
+    anim = FuncAnimation(
+        fig,
+        update,
+        frames=frames,
+        interval=100,
+        blit=False,
+    )
+
+    plt.show()
+    return anim
+
