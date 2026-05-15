@@ -58,6 +58,7 @@ Visualization and plotting tools
 
 tests/
 Discrete operator and projection-method tests
+```
 
 ## Notes
 This repository reflects an evolving numerical implementation rather than a finalized CFD solver.
@@ -70,7 +71,6 @@ The commit history documents the development process, including debugging stages
 - Improve convergence behavior
 - Add higher-order advection schemes
 - Extend to passive scalar transport
-
 
 ## Technologies
 - Python
