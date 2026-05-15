@@ -1,9 +1,10 @@
 import numpy as np
 
-grid_list = [21, 31, 41, 51]
+grid_list = [21, 31, 41, 51, 61]
 
-u_errors = [0.0456, 0.0285, 0.0207, 0.0164]
-v_errors = [0.0175, 0.0111, 0.0084, 0.0069]
+# tol = 1e-6, nsteps = 20000
+u_errors = [0.0452, 0.0281, 0.0205, 0.0162, 0.0134]
+v_errors = [0.0167, 0.0108, 0.0085, 0.0073, 0.0067]
 
 print("=== Observed convergence order ===")
 

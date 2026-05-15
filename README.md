@@ -2,46 +2,77 @@
 
 ## Overview
 
-This project implements a 2D incompressible Navier–Stokes solver from scratch using the projection method.
-The goal is not only to reproduce a classical lid-driven cavity flow, but to understand the numerical and structural aspects of pressure–velocity coupling.
+This project implements a 2D incompressible Navier–Stokes solver from scratch using a finite-difference projection method.
 
-## Key Components
+The primary goal is not only to reproduce the classical lid-driven cavity benchmark, but also to investigate the numerical structure of incompressible flow solvers, particularly pressure–velocity coupling, incompressibility enforcement, and staggered-grid discretization.
 
-* Finite difference discretization (2D)
-* Projection method for incompressibility enforcement
-* Pressure Poisson equation solver
-* Staggered (MAC-like) grid formulation
-* Diagnostics for divergence and consistency checks
+The implementation focuses on understanding the numerical behavior of the solver rather than treating CFD as a black-box simulation pipeline.
 
-## Motivation
+## Features
 
-While lid-driven cavity is a classical benchmark problem, this implementation focuses on:
-
-* Understanding the difference between collocated and staggered grids
-* Investigating divergence control and numerical consistency
-* Debugging pressure–velocity coupling from first principles
+- Finite-difference discretization (2D)
+- Projection method for incompressibility enforcement
+- Pressure Poisson equation solver
+- Staggered (MAC-like) grid formulation
+- Divergence diagnostics and consistency checks
+- Lid-driven cavity benchmark validation
+- Jacobi and SOR iterative solvers
 
 ## Current Status
 
-* Projection pipeline implemented
-* Divergence reduction verified
-* Visualization of velocity field and divergence
-* Ongoing refinement of boundary treatment and solver stability
+- Projection pipeline implemented
+- Divergence reduction verified
+- MAC staggered-grid formulation implemented
+- Velocity-field and divergence visualization completed
+- Preliminary benchmark comparison against cavity-flow reference data
+- Ongoing refinement of:
+  - boundary-condition consistency
+  - pressure projection
+  - solver stability
 
-## Structure
+## Numerical Challenges Explored
 
-* `CORE.py` – core numerical routines
-* `MAIN.py` – main execution script
-* `DIAG.py` – diagnostics and validation
-* `PLOTS.py` – visualization
+This repository documents several intermediate implementation and debugging stages, including:
+
+- Checkerboard pressure artifacts in collocated grids
+- Pressure–velocity decoupling
+- Divergence persistence after projection
+- Neumann pressure gauge fixing
+- Jacobi vs. SOR convergence behavior
+- Boundary-condition consistency on staggered grids
+
+## Repository Structure
+
+```text
+core.py
+Core numerical operators and solver routines
+
+main.py
+Main simulation driver
+
+diag.py
+Diagnostics and validation utilities
+
+plots.py
+Visualization and plotting tools
+
+tests/
+Discrete operator and projection-method tests
 
 ## Notes
+This repository reflects an evolving numerical implementation rather than a finalized CFD solver.
 
-This repository reflects an evolving implementation rather than a finalized solver.
-The commit history documents the development process, including debugging and design decisions.
+The commit history documents the development process, including debugging stages, numerical experiments, and design decisions made throughout the implementation.
 
 ## Future Work
+- Improve Poisson solver efficiency (GS / SOR / multigrid)
+- Refine boundary-condition treatment
+- Improve convergence behavior
+- Add higher-order advection schemes
+- Extend to passive scalar transport
 
-* Improve Poisson solver efficiency (GS / SOR)
-* Refine boundary conditions
-* Extend to passive scalar transport
+
+## Technologies
+- Python
+- NumPy
+- Matplotlib

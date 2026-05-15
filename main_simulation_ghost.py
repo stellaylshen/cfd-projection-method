@@ -22,14 +22,14 @@ from diag import (
 # -------------------------------------------------
 # Simulation parameters
 # -------------------------------------------------
-Nx = 51
-Ny = 51
+Nx = 61
+Ny = 61
 
 Re = 100.0
 nu = 1.0 / Re
 
 dt = 5e-3
-nsteps = 200
+nsteps = 5000
 
 # -------------------------------------------------
 # Setup grid
@@ -48,7 +48,7 @@ history = run_ns_projection_mac_ghost(
     U_lid=1.0,
     steady_tol=1e-6,
     min_steps=100,
-    print_every=100,
+    print_every=500,
 )
 
 final = history[-1]

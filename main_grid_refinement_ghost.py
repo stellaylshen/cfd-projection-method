@@ -11,7 +11,7 @@ from plots import (
     plot_grid_convergence_loglog, 
 )
 
-def run_case(N, nsteps=2000, dt=5e-3, Re=100.0):
+def run_case(N, nsteps=20000, dt=5e-3, Re=100.0):
     dx, dy, _, _, _, Xp, Yp, _, _, _, _ = setup_mac_grid_ghost(N, N)
     nu = 1.0 / Re
 
@@ -21,9 +21,9 @@ def run_case(N, nsteps=2000, dt=5e-3, Re=100.0):
         dt=dt,
         nu=nu,
         U_lid=1.0,
-        steady_tol=1e-5,
+        steady_tol=1e-6,
         min_steps=100,
-        print_every=100,
+        print_every=1000,
     )
 
     final = history[-1]
@@ -35,7 +35,7 @@ def run_case(N, nsteps=2000, dt=5e-3, Re=100.0):
     return errors, history
 
 if __name__ == "__main__":
-    grid_list = [21, 31, 41, 51]
+    grid_list = [21, 31, 41, 51, 61, 71, 81]
 
     u_errors = []
     v_errors = []
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     results_table = []
 
     for N in grid_list:
-        nsteps = 2000 if N <= 31 else 3000
+        nsteps = 20000 
         print(f"\nRunning GHOST N = {N}, nsteps = {nsteps} ...")
         errors, history = run_case(N, nsteps=nsteps)
 
@@ -84,3 +84,6 @@ if __name__ == "__main__":
     u_errors,
     v_errors,
     )
+
+
+

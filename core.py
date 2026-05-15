@@ -1249,6 +1249,9 @@ def run_ns_projection_mac_ghost(
                 f"max|div_new| = {np.max(np.abs(results['div_new'])):.3e}"
             )
 
+    if len(history) == nsteps:
+        print("WARNING: reached max nsteps before steady convergence")
+    
     return history
 
 
