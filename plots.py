@@ -1,7 +1,9 @@
 # Plots for staggered_grid.py
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 from core import compute_pressure_gradient_mac
+
 # =========================================================
 # Plots
 # =========================================================
@@ -303,9 +305,6 @@ def plot_divergence_interior_only(div, Xp, Yp):
     plt.show()
 
 def plot_vector_decomposition(u_star, v_star, u_new, v_new, Xp, Yp):
-    import matplotlib.pyplot as plt
-    import numpy as np
-
     # face → center
     def to_center(u, v):
         uc = 0.5 * (u[:-1, :] + u[1:, :])
@@ -359,9 +358,6 @@ def plot_projection_dashboard(
     dx, dy,
     Nx, Ny, Lx=1.0, Ly=1.0
 ):
-    import numpy as np
-    import matplotlib.pyplot as plt
-
     fig, axes = plt.subplots(2, 4, figsize=(20, 10))
     axes = axes.flatten()
 
@@ -473,13 +469,13 @@ def plot_projection_dashboard(
     fig.colorbar(cf2, ax=ax)
 
     # =========================
-    # (8) debug slot
+    # (8) projection diagnostics
     # =========================
     ax = axes[7]
     ax.axis("off")
     ax.text(
         0.5, 0.75,
-        "debug slot",
+        "projection diagnostics",
         ha="center", va="center",
         fontsize=14,
         transform=ax.transAxes
@@ -550,6 +546,83 @@ def plot_centerline_v(X, v_sim, ghia, Re=100):
     plt.legend()
     plt.show()
 
+def plot_ghia_comparison_combined(Xp, Yp, u_c, v_c, ghia, errors, Re=100):
+    Nx, Ny = u_c.shape
+    i_mid = Nx // 2
+    j_mid = Ny // 2
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    # -------------------------------------------------
+    # u velocity along vertical centerline x = 0.5
+    # -------------------------------------------------
+    axes[0].plot(
+        u_c[i_mid, :],
+        Yp[i_mid, :],
+        "o-",
+        label="simulation",
+        markersize=4,
+    )
+    axes[0].plot(
+        ghia["u"],
+        ghia["y"],
+        "s",
+        label="Ghia et al. (1982)",
+        markersize=4,
+    )
+
+    axes[0].set_xlabel(r"$u$ at $x=0.5$")
+    axes[0].set_ylabel("y")
+    axes[0].set_title("Vertical centerline velocity")
+    axes[0].grid(True, alpha=0.3)
+    axes[0].legend(fontsize=7)
+
+    axes[0].text(
+        0.05,
+        0.12,
+        f"RMSE = {errors['u_L2']:.4f}",
+        transform=axes[0].transAxes,
+        fontsize=9,
+        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
+    )
+
+    # -------------------------------------------------
+    # v velocity along horizontal centerline y = 0.5
+    # -------------------------------------------------
+    axes[1].plot(
+        Xp[:, j_mid],
+        v_c[:, j_mid],
+        "o-",
+        label="simulation",
+        markersize=4,
+    )
+    axes[1].plot(
+        ghia["x"],
+        ghia["v"],
+        "s",
+        label="Ghia et al. (1982)",
+        markersize=4,
+    )
+
+    axes[1].set_xlabel(r"$x$")
+    axes[1].set_ylabel(r"$v$ at $y=0.5$")
+    axes[1].set_title("Horizontal centerline velocity")
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend(fontsize=7)
+    axes[1].axhline(0, color="gray", lw=0.8, alpha=0.5)
+
+    axes[1].text(
+        0.05,
+        0.12,
+        f"RMSE = {errors['v_L2']:.4f}",
+        transform=axes[1].transAxes,
+        fontsize=9,
+        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
+    )
+
+    plt.tight_layout()
+    plt.savefig("fig5_ghia_centerline_comparison_re100.png", dpi=300)
+    plt.show()
 
 def plot_grid_convergence(grid_list, u_errors, v_errors):
     plt.figure(figsize=(5, 4))
@@ -567,41 +640,60 @@ def plot_grid_convergence_loglog(grid_list, u_errors, v_errors):
 
     plt.figure(figsize=(6, 5))
 
-    plt.loglog(h, u_errors, 'o-', label='u_L2')
-    plt.loglog(h, v_errors, 's-', label='v_L2')
+    plt.loglog(
+        h,
+        u_errors,
+        "o-",
+        label=r"$u$ RMSE",
+        markersize=5,
+    )
 
-    plt.xlabel("Grid spacing h")
-    plt.ylabel("L2 error")
-    plt.title("Grid Convergence (log-log)")
-    plt.grid(True)
-    plt.legend()
+    plt.loglog(
+        h,
+        v_errors,
+        "s-",
+        label=r"$v$ RMSE",
+        markersize=5,
+    )
+
+    # refinement goes to the right
+    plt.gca().invert_xaxis()
+
+    plt.xlabel(r"Grid spacing $h$")
+    plt.ylabel("RMSE")
+    plt.title("Grid refinement study")
+    plt.grid(True, which="both", alpha=0.3)
+
+    plt.legend(fontsize=8)
+
+    plt.tight_layout()
+    plt.savefig("fig6_grid_refinement_re100.png", dpi=300)
 
     plt.show()
 
 def plot_streamlines(Xp, Yp, u_c, v_c, Re):
+    speed = np.sqrt(u_c**2 + v_c**2)
+
     plt.figure(figsize=(6, 5))
-
+    cf = plt.contourf(Xp, Yp, speed, levels=30)
     plt.streamplot(
-        Xp.T,
-        Yp.T,
-        u_c.T,
-        v_c.T,
-        density=1.2,
-        linewidth=1.0,
-        arrowsize=1.0,
+        Xp.T, Yp.T,
+        u_c.T, v_c.T,
+        density=1.4,
+        linewidth=0.9,
+        arrowsize=0.8,
+        color="k",
     )
-
-    plt.title(f"Streamlines (Re={Re:.0f})")
+    plt.colorbar(cf, label="velocity magnitude")
+    plt.title(f"Lid-driven cavity flow at Re={Re:.0f}")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.axis("equal")
-
+    plt.tight_layout()
+    plt.savefig("fig3_streamlines_re100.png", dpi=300)
     plt.show()
 
 def animate_velocity_field_ghost(history, Xp, Yp, face_to_center_func, skip=20):
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation
-
     fig, ax = plt.subplots(figsize=(6, 5))
 
     first = history[0]
@@ -632,10 +724,6 @@ def animate_velocity_field_ghost(history, Xp, Yp, face_to_center_func, skip=20):
     return anim
 
 def animate_velocity_field_pretty(history, Xp, Yp, face_to_center_func, skip=20):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation
-
     fig, ax = plt.subplots(figsize=(6, 5))
 
     # downsample arrows
@@ -694,4 +782,78 @@ def animate_velocity_field_pretty(history, Xp, Yp, face_to_center_func, skip=20)
 
     plt.show()
     return anim
+
+def plot_projection_diagnostics_clean(Xp, Yp, div_star, p, div_new, Re=100):
+    # mask boundary cells for cleaner interior visualization
+    div_star_plot = div_star.copy()
+    div_new_plot = div_new.copy()
+
+    div_star_plot[[0, -1], :] = np.nan
+    div_star_plot[:, [0, -1]] = np.nan
+    div_new_plot[[0, -1], :] = np.nan
+    div_new_plot[:, [0, -1]] = np.nan
+
+    # use a fixed clipped scale for visualization
+    div_max = 0.1
+    div_levels = np.linspace(-div_max, div_max, 31)
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+
+    # -------------------------
+    # before projection
+    # -------------------------
+    cf0 = axes[0].contourf(
+        Xp, Yp, div_star_plot,
+        levels=div_levels,
+        extend="both"
+    )
+    axes[0].set_title(r"$\nabla \cdot u^*$")
+    axes[0].set_xlabel("x")
+    axes[0].set_ylabel("y")
+    axes[0].set_aspect("equal")
+    fig.colorbar(cf0, ax=axes[0], fraction=0.046, pad=0.04)
+
+    # -------------------------
+    # after projection
+    # -------------------------
+    cf1 = axes[1].contourf(
+        Xp, Yp, div_new_plot,
+        levels=div_levels,
+        extend="both"
+    )
+    axes[1].set_title(r"$\nabla \cdot u^{n+1}$")
+    axes[1].set_xlabel("x")
+    axes[1].set_ylabel("y")
+    axes[1].set_aspect("equal")
+    fig.colorbar(cf1, ax=axes[1], fraction=0.046, pad=0.04)
+
+    # -------------------------
+    # quantitative reduction
+    # -------------------------
+    max_div_star = np.nanmax(np.abs(div_star_plot))
+    max_div_new = np.nanmax(np.abs(div_new_plot))
+    reduction = max_div_star / max_div_new if max_div_new > 0 else np.inf
+
+    axes[2].bar(
+        [r"$\nabla \cdot u^*$", r"$\nabla \cdot u^{n+1}$"],
+        [max_div_star, max_div_new]
+    )
+    axes[2].set_yscale("log")
+    axes[2].set_ylim(1e-7, 1)
+    axes[2].set_ylabel("max absolute divergence")
+    axes[2].set_title("divergence reduction")
+    axes[2].grid(True, axis="y", alpha=0.3)
+
+    axes[2].text(
+        0.5,
+        0.82,
+        f"reduction ≈ {reduction:.1f}×",
+        ha="center",
+        va="center",
+        transform=axes[2].transAxes
+    )
+
+    plt.tight_layout()
+    plt.savefig("fig4_projection_diagnostics_re100.png", dpi=300)
+    plt.show()
 

@@ -12,6 +12,8 @@ from plots import (
     plot_centerline_v,
     plot_streamlines,
     animate_velocity_field_pretty,
+    plot_projection_diagnostics_clean,
+    plot_ghia_comparison_combined,
 )
 
 from diag import (
@@ -22,8 +24,8 @@ from diag import (
 # -------------------------------------------------
 # Simulation parameters
 # -------------------------------------------------
-Nx = 61
-Ny = 61
+Nx = 21
+Ny = 21
 
 Re = 100.0
 nu = 1.0 / Re
@@ -111,10 +113,34 @@ plot_final_velocity(
 i_mid = Nx // 2
 j_mid = Ny // 2
 
-plot_centerline_u(Yp[i_mid, :], u_c[i_mid, :], ghia, Re)
-plot_centerline_v(Xp[:, j_mid], v_c[:, j_mid], ghia, Re)
+#plot_centerline_u(Yp[i_mid, :], u_c[i_mid, :], ghia, Re)
+#plot_centerline_v(Xp[:, j_mid], v_c[:, j_mid], ghia, Re)
+
+plot_ghia_comparison_combined(
+    Xp,
+    Yp,
+    u_c,
+    v_c,
+    ghia,
+    errors,
+    Re,
+)
 
 plot_streamlines(Xp, Yp, u_c, v_c, Re)
+
+
+# Use an intermediate frame to better visualize the divergence-removal behavior of the projection step.
+# Final steady state contains only very weak divergence.
+diag_frame = history[min(50, len(history) - 1)]
+
+plot_projection_diagnostics_clean(
+    Xp,
+    Yp,
+    diag_frame["div_star"],
+    diag_frame["p"],
+    diag_frame["div_new"],
+    Re,
+)
 
 anim = animate_velocity_field_pretty(
     history,

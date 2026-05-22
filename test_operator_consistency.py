@@ -14,12 +14,6 @@ from core import (
     solve_poisson_sor_mac,
     run_ns_projection_mac_ghost,
 )
-from test import (
-    test_divergence,
-    test_gradient,
-    test_div_grad_closure,
-    test_projection_mac,
-)
 
 if __name__ == "__main__":
     # =================================================

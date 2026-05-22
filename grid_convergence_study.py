@@ -35,7 +35,7 @@ def run_case(N, nsteps=20000, dt=5e-3, Re=100.0):
     return errors, history
 
 if __name__ == "__main__":
-    grid_list = [21, 31, 41, 51, 61, 71, 81]
+    grid_list = [21, 31]
 
     u_errors = []
     v_errors = []

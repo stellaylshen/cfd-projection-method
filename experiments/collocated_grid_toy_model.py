@@ -1273,6 +1273,114 @@ def slider_view_ij_xy(history):
     draw(0)
     #plt.show()
 
+def plot_collocated_projection_snapshot(
+    X, Y,
+    div_star,
+    p,
+    div_new,
+    step=None,
+    save_path=None
+):
+    """
+    Clean report-style figure for collocated-grid projection diagnostics.
+
+    Panels:
+        1. div_star
+        2. pressure field
+        3. div_new
+
+    Intended for report / README figures,
+    NOT debugging UI.
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
+
+    # -------------------------------------------------
+    # shared divergence color scale
+    # -------------------------------------------------
+    vmax_div = max(
+        np.max(np.abs(div_star)),
+        np.max(np.abs(div_new))
+    )
+
+    levels_div = np.linspace(-vmax_div, vmax_div, 21)
+
+    # -------------------------------------------------
+    # Panel 1 : div_star
+    # -------------------------------------------------
+    ax = axes[0]
+
+    cf1 = ax.contourf(
+        X, Y,
+        div_star,
+        levels=levels_div,
+        cmap="coolwarm"
+    )
+
+    fig.colorbar(cf1, ax=ax)
+
+    ax.set_title(r"$\nabla \cdot u^*$")
+    ax.set_aspect("equal")
+
+    # -------------------------------------------------
+    # Panel 2 : pressure
+    # -------------------------------------------------
+    ax = axes[1]
+
+    levels_p = 21
+
+    cf2 = ax.contourf(
+        X, Y,
+        p,
+        levels=levels_p,
+        cmap="viridis"
+    )
+
+    fig.colorbar(cf2, ax=ax)
+
+    ax.set_title("pressure field")
+    ax.set_aspect("equal")
+
+    # -------------------------------------------------
+    # Panel 3 : div_new
+    # -------------------------------------------------
+    ax = axes[2]
+
+    cf3 = ax.contourf(
+        X, Y,
+        div_new,
+        levels=levels_div,
+        cmap="coolwarm"
+    )
+
+    fig.colorbar(cf3, ax=ax)
+
+    ax.set_title(r"$\nabla \cdot u^{n+1}$")
+    ax.set_aspect("equal")
+
+    # -------------------------------------------------
+    # overall title
+    # -------------------------------------------------
+    if step is not None:
+        fig.suptitle(
+            f"Collocated-grid projection diagnostics (step {step})",
+            fontsize=14
+        )
+
+    plt.tight_layout()
+
+    # -------------------------------------------------
+    # save
+    # -------------------------------------------------
+    if save_path is not None:
+        plt.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight"
+        )
+
+    plt.show()
+
+
 # =========================================================
 # 3. Initial condition
 # =========================================================
@@ -1352,12 +1460,20 @@ for n in range(1, nt + 1):
     #     ∇²p = (1/dt) div_star
     # -----------------------------------------------------
     #b = div_star / dt
-    p, poisson_res_hist, poisson_iters_used = solve_poisson_gs_until_converged(
+    
+    # p, poisson_res_hist, poisson_iters_used = solve_poisson_gs_until_converged(
+    # b, dx, dy,
+    # tol = 1e-4,
+    # max_iter = 5000,
+    # return_history = True
+    # )
+
+    p, poisson_res_hist = solve_poisson_jacobi(
     b, dx, dy,
-    tol = 1e-4,
-    max_iter = 5000,
-    return_history = True
+    n_iter=20,
+    return_history=True
     )
+    poisson_iters_used = 20
     # -----------------------------------------------------
     # Step 4. pressure gradient
     # -----------------------------------------------------
@@ -1374,8 +1490,12 @@ for n in range(1, nt + 1):
     u_new[1:-1, 1:-1] = u_star[1:-1, 1:-1] - dt * dpdx[1:-1, 1:-1]
     v_new[1:-1, 1:-1] = v_star[1:-1, 1:-1] - dt * dpdy[1:-1, 1:-1]
 
-    u_new, v_new = apply_velocity_bc(u_new, v_new)
+    # divergence immediately after projection
+    # BEFORE BC re-enforcement
+    div_proj = compute_divergence(u_new, v_new, dx, dy)
 
+    # re-apply BC
+    u_new, v_new = apply_velocity_bc(u_new, v_new)
     # -----------------------------------------------------
     # Step 6. check divergence after projection
     # -----------------------------------------------------
@@ -1386,12 +1506,20 @@ for n in range(1, nt + 1):
     max_div_star = np.max(np.abs(div_star[1:-1, 1:-1]))
     max_div_new  = np.max(np.abs(div_new[1:-1, 1:-1]))
 
-    print(f"\n================ timestep {n} ================")
-    print("max|div_star| =", np.max(np.abs(div_star[1:-1, 1:-1])))
-    print("max|div_new|  =", np.max(np.abs(div_new[1:-1, 1:-1])))
-    print("poisson iterations used =", poisson_iters_used)
-    print("poisson final residual =", res_final)
-    print("div reduction ratio =", max_div_new / (max_div_star + 1e-12))
+    # print(f"\n================ timestep {n} ================")
+    # print("max|div_star| =", np.max(np.abs(div_star[1:-1, 1:-1])))
+    # print("max|div_new|  =", np.max(np.abs(div_new[1:-1, 1:-1])))
+    # print("poisson iterations used =", poisson_iters_used)
+    # print("poisson final residual =", res_final)
+    # print("div reduction ratio =", max_div_new / (max_div_star + 1e-12))
+
+    if n % 10 == 0:
+        print(
+        f"step {n:3d} | "
+        f"max|div_star| = {max_div_star:.3e} | "
+        f"max|div_new| = {max_div_new:.3e} | "
+        f"ratio = {max_div_new/max_div_star:.3f}"
+        )
 
     # 先存起來最後再畫
     # 加入 u_n → u_star → u_new
@@ -1407,6 +1535,7 @@ for n in range(1, nt + 1):
         "u_star": u_star.copy(),
         "v_star": v_star.copy(),
         "div_star": div_star.copy(),
+        "div_proj": div_proj.copy(),
 
         "p": p.copy(),
 
@@ -1490,3 +1619,104 @@ else:
             f"max|div_new| = {max_div_new_gs:.6e} | "
             f"div reduction ratio = {ratio_gs:.6f}"
         )
+
+plot_collocated_projection_snapshot(
+    X, Y,
+    history[9]["div_star"],
+    history[9]["p"],
+    history[9]["div_new"],
+    step=80,
+    save_path="collocated_projection.png"
+)
+
+
+# =========================================================
+# Clean report-style collocated projection figure
+# Figure 2:
+#     div_star | div_proj | div_new
+# =========================================================
+
+def plot_collocated_projection_pathology(
+    X, Y,
+    div_star,
+    div_proj,
+    div_new,
+    step=None,
+    save_path=None
+):
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
+
+    # -------------------------------------------------
+    # shared color scale
+    # -------------------------------------------------
+    vmax = max(
+        np.max(np.abs(div_star)),
+        np.max(np.abs(div_proj)),
+        np.max(np.abs(div_new))
+    )
+
+    levels = np.linspace(-vmax, vmax, 21)
+
+    fields = [
+        (div_star, r"$\nabla \cdot u^*$"),
+        (div_proj, r"$\nabla \cdot u_{\mathrm{proj}}$"),
+        (div_new,  r"$\nabla \cdot u^{n+1}$")
+    ]
+
+    for ax, (field, title) in zip(axes, fields):
+
+        cf = ax.contourf(
+            X,
+            Y,
+            field,
+            levels=levels,
+            cmap="coolwarm"
+        )
+
+        fig.colorbar(cf, ax=ax)
+
+        ax.set_title(title, fontsize=12)
+
+        ax.set_aspect("equal")
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # -------------------------------------------------
+    # overall title
+    # -------------------------------------------------
+    if step is not None:
+
+        fig.suptitle(
+            f"Collocated-grid projection diagnostics (step {step})",
+            fontsize=14
+        )
+
+    plt.tight_layout()
+
+    # -------------------------------------------------
+    # save
+    # -------------------------------------------------
+    if save_path is not None:
+
+        plt.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight"
+        )
+
+    plt.show()
+
+plot_collocated_projection_pathology(
+
+    X,
+    Y,
+
+    history[9]["div_star"],
+    history[9]["div_proj"],
+    history[9]["div_new"],
+
+    step=10,
+
+    save_path="figure2_collocated_pathology.png"
+)
