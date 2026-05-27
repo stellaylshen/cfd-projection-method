@@ -1,6 +1,13 @@
-# main_debug.py
-# 專門看中間過程 例如看 boundary artifact、projection 到底修了什麼和沒修什麼
-# 7x7 or 15x15 grid
+"""
+Legacy debugging script for projection-pathology experiments.
+
+This script uses the non-ghost MAC implementation to inspect intermediate
+projection behavior, boundary artifacts, and divergence/pressure-RHS
+patterns on small grids.
+
+It is retained for development history and is not part of the final
+ghost-cell cavity benchmark pipeline.
+"""
 
 import numpy as np
 import matplotlib.pyplot as plt

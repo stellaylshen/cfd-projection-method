@@ -35,7 +35,7 @@ def run_case(N, nsteps=5000, dt=5e-3, Re=100.0):
     return errors, history
 
 if __name__ == "__main__":
-    grid_list = [21, 31, 41, 51, 61]
+    grid_list = [21, 31]
 
     u_errors = []
     v_errors = []
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     results_table = []
 
     for N in grid_list:
-        nsteps = 20000 
+        nsteps = 5000 
         print(f"\nRunning GHOST N = {N}, nsteps = {nsteps} ...")
         errors, history = run_case(N, nsteps=nsteps)
 
@@ -84,6 +84,24 @@ if __name__ == "__main__":
     u_errors,
     v_errors,
     )
+
+    print("\n=== Observed convergence order ===")
+
+    for k in range(len(grid_list) - 1):
+        N1 = grid_list[k]
+        N2 = grid_list[k + 1]
+
+        h1 = 1.0 / N1
+        h2 = 1.0 / N2
+        r = h1 / h2
+
+        p_u = np.log(u_errors[k] / u_errors[k + 1]) / np.log(r)
+        p_v = np.log(v_errors[k] / v_errors[k + 1]) / np.log(r)
+
+        print(
+            f"N={N1}->{N2}: "
+            f"p_u = {p_u:.2f}, p_v = {p_v:.2f}"
+        )
 
 
 
