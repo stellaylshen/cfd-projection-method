@@ -1,3 +1,11 @@
+"""
+Main driver script for the final Re=100 lid-driven cavity simulation.
+
+Runs the ghost-cell MAC projection solver, generates benchmark
+comparisons and projection diagnostics, and reproduces the figures
+used in the report.
+"""
+
 import numpy as np
 
 from core import (
@@ -8,10 +16,8 @@ from core import (
 
 from plots import (
     plot_final_velocity,
-    plot_centerline_u, 
-    plot_centerline_v,
     plot_streamlines,
-    animate_velocity_field_pretty,
+    animate_velocity_field,
     plot_projection_diagnostics_clean,
     plot_ghia_comparison_combined,
 )
@@ -23,9 +29,11 @@ from diag import (
 
 # -------------------------------------------------
 # Simulation parameters
+# Final report results use a 61x61 MAC pressure grid.
+# Smaller grids such as 21x21 are useful only for quick debugging.
 # -------------------------------------------------
-Nx = 21
-Ny = 21
+Nx = 61
+Ny = 61
 
 Re = 100.0
 nu = 1.0 / Re
@@ -110,12 +118,6 @@ plot_final_velocity(
     v_c,
 )
 
-i_mid = Nx // 2
-j_mid = Ny // 2
-
-#plot_centerline_u(Yp[i_mid, :], u_c[i_mid, :], ghia, Re)
-#plot_centerline_v(Xp[:, j_mid], v_c[:, j_mid], ghia, Re)
-
 plot_ghia_comparison_combined(
     Xp,
     Yp,
@@ -128,12 +130,15 @@ plot_ghia_comparison_combined(
 
 plot_streamlines(Xp, Yp, u_c, v_c, Re)
 
-
-# Use an intermediate frame to better visualize the divergence-removal behavior of the projection step.
-# Final steady state contains only very weak divergence.
+# -------------------------------------------------
+# Projection diagnostics
+# Use an intermediate frame to visualize divergence removal.
+# The final steady-state field has much weaker divergence, making
+# the projection effect less visible in the diagnostic plot.
+# -------------------------------------------------
 diag_frame = history[min(50, len(history) - 1)]
 
-plot_projection_diagnostics_clean(
+diag_projection = plot_projection_diagnostics_clean(
     Xp,
     Yp,
     diag_frame["div_star"],
@@ -142,11 +147,18 @@ plot_projection_diagnostics_clean(
     Re,
 )
 
-anim = animate_velocity_field_pretty(
+print(diag_projection)
+
+anim = animate_velocity_field(
     history,
     Xp,
     Yp,
     face_to_center_velocity_ghost,
-    skip=20,
+    skip=50,
 )
-#anim.save("velocity_evolution.gif", writer="pillow", fps=10)
+anim.save("velocity_evolution.gif", writer="pillow", fps=10)
+speed = np.sqrt(u_c**2 + v_c**2)
+print("final speed max =", np.max(speed))
+print("final umax =", final["umax"])
+print("final vmax =", final["vmax"])
+print("final step =", final["step"])

@@ -44,20 +44,17 @@ This repository documents several intermediate implementation and debugging stag
 ## Repository Structure
 
 ```text
-core.py
-Core numerical operators and solver routines
+run_projection_solver.py
+Main driver used to reproduce the final Re=100 cavity simulation and report figures.
 
-main.py
-Main simulation driver
+grid_convergence_study.py
+Runs grid-refinement cases and generates convergence data.
 
-diag.py
-Diagnostics and validation utilities
+test_operator_consistency.py
+Standalone consistency checks for divergence, gradient, projection, and ghost-cell operators.
 
-plots.py
-Visualization and plotting tools
-
-tests/
-Discrete operator and projection-method tests
+experiments/
+Exploratory scripts used during development, including collocated-grid pathology and archived solver variants.
 ```
 
 ## Notes

@@ -1,12 +1,477 @@
-# Plots for staggered_grid.py
+"""
+Visualization utilities for the 2D lid-driven cavity solver.
+
+This module contains plotting functions for:
+1. projection-method diagnostics,
+2. velocity and pressure field visualization,
+3. benchmark comparison with Ghia et al. (1982),
+4. grid-refinement and convergence analysis,
+5. transient flow animation.
+
+Most functions assume a staggered MAC grid, with:
+- pressure stored at cell centers,
+- velocity components stored on cell faces,
+- interpolated cell-centered velocities used for visualization.
+
+Some legacy/debug plotting functions are intentionally preserved
+to document the solver development and debugging process.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from core import compute_pressure_gradient_mac
 
-# =========================================================
-# Plots
-# =========================================================
+# ============================================================
+# Main plotting utilities
+# ============================================================
+def plot_projection_dashboard(
+    Xp, Yp, Xu, Yu, Xv, Yv,
+    u_star, v_star,
+    u_new, v_new,
+    p,
+    div_star, div_new,
+    dx, dy,
+    Nx, Ny, Lx=1.0, Ly=1.0
+):
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+    axes = axes.flatten()
+
+    # -------------------------
+    # common grid
+    # -------------------------
+    x_edges = np.linspace(0.0, Lx, Nx + 1)
+    y_edges = np.linspace(0.0, Ly, Ny + 1)
+
+    def draw_base(ax):
+        for x in x_edges:
+            ax.axvline(x, color='gray', lw=1, alpha=0.25)
+        for y in y_edges:
+            ax.axhline(y, color='gray', lw=1, alpha=0.25)
+        ax.set_xlim(-0.02, Lx + 0.02)
+        ax.set_ylim(-0.02, Ly + 0.02)
+        ax.set_aspect('equal')
+
+    # -------------------------
+    # interpolate helper
+    # -------------------------
+    def face_to_center(u, v):
+        uc = 0.5 * (u[:-1, :] + u[1:, :])
+        vc = 0.5 * (v[:, :-1] + v[:, 1:])
+        return uc, vc
+
+    # -------------------------
+    # safe quiver helper
+    # -------------------------
+    def safe_quiver(ax, X, Y, U, V, title, scale=None):
+        draw_base(ax)
+        mag = np.sqrt(U**2 + V**2)
+        if np.max(mag) < 1e-14:
+            ax.text(
+                0.5, 0.5, "≈ 0 everywhere",
+                ha="center", va="center",
+                transform=ax.transAxes
+            )
+        else:
+            if scale is None:
+                ax.quiver(X, Y, U, V)
+            else:
+                ax.quiver(X, Y, U, V, scale=scale)
+        ax.set_title(title)
+
+    # =========================
+    # (1) MAC layout
+    # =========================
+    ax = axes[0]
+    draw_base(ax)
+    ax.scatter(Xp, Yp, c='black', s=30, label='p')
+    ax.scatter(Xu, Yu, c='red', s=15, marker='s', label='u')
+    ax.scatter(Xv, Yv, c='blue', s=15, marker='^', label='v')
+    ax.set_title("MAC layout")
+    ax.legend(fontsize=8, loc='upper right')
+
+    # =========================
+    # (2) u_star
+    # =========================
+    u_star_c, v_star_c = face_to_center(u_star, v_star)
+    safe_quiver(axes[1], Xp, Yp, u_star_c, v_star_c, "u_star")
+
+    # =========================
+    # (3) velocity field (same as u_new, emphasized as actual flow)
+    # =========================
+    u_new_c, v_new_c = face_to_center(u_new, v_new)
+    safe_quiver(axes[2], Xp, Yp, u_new_c, v_new_c, "velocity field")
+
+    # =========================
+    # (4) correction = -grad(p)
+    # =========================
+    dpdx_u, dpdy_v = compute_pressure_gradient_mac(p, dx, dy)
+    dpdx_c = 0.5 * (dpdx_u[:-1, :] + dpdx_u[1:, :])
+    dpdy_c = 0.5 * (dpdy_v[:, :-1] + dpdy_v[:, 1:])
+
+    corr_u = -dpdx_c
+    corr_v = -dpdy_c
+    safe_quiver(axes[3], Xp, Yp, corr_u, corr_v, "correction = -grad(p)")
+
+    # =========================
+    # (5) u_new
+    # =========================
+    safe_quiver(axes[4], Xp, Yp, u_new_c, v_new_c, "u_new")
+
+    # =========================
+    # shared color scale
+    # =========================
+    vmax = max(np.max(np.abs(div_star)), np.max(np.abs(div_new)))
+    if vmax < 1e-14:
+        vmax = 1.0
+    levels = np.linspace(-vmax, vmax, 21)
+
+    # =========================
+    # (6) div_star
+    # =========================
+    ax = axes[5]
+    draw_base(ax)
+    cf1 = ax.contourf(Xp, Yp, div_star, levels=levels)
+    ax.set_title("div_star")
+    fig.colorbar(cf1, ax=ax)
+
+    # =========================
+    # (7) div_new
+    # =========================
+    ax = axes[6]
+    draw_base(ax)
+    cf2 = ax.contourf(Xp, Yp, div_new, levels=levels)
+    ax.set_title("div_new")
+    fig.colorbar(cf2, ax=ax)
+
+    # =========================
+    # (8) projection diagnostics
+    # =========================
+    ax = axes[7]
+    ax.axis("off")
+    ax.text(
+        0.5, 0.75,
+        "projection diagnostics",
+        ha="center", va="center",
+        fontsize=14,
+        transform=ax.transAxes
+    )
+    ax.text(
+        0.5, 0.48,
+        f"max|div_star| = {np.max(np.abs(div_star)):.3e}",
+        ha="center", va="center",
+        fontsize=11,
+        transform=ax.transAxes
+    )
+    ax.text(
+        0.5, 0.34,
+        f"max|div_new|  = {np.max(np.abs(div_new)):.3e}",
+        ha="center", va="center",
+        fontsize=11,
+        transform=ax.transAxes
+    )
+    ax.text(
+        0.5, 0.20,
+        f"max|div_new interior| = {np.max(np.abs(div_new[1:-1, 1:-1])):.3e}",
+        ha="center", va="center",
+        fontsize=11,
+        transform=ax.transAxes
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_ghia_comparison_combined(Xp, Yp, u_c, v_c, ghia, errors, Re=100):
+    Nx, Ny = u_c.shape
+    i_mid = Nx // 2
+    j_mid = Ny // 2
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    # -------------------------------------------------
+    # u velocity along vertical centerline x = 0.5
+    # -------------------------------------------------
+    axes[0].plot(
+        u_c[i_mid, :],
+        Yp[i_mid, :],
+        "o-",
+        label="simulation",
+        markersize=4,
+    )
+    axes[0].plot(
+        ghia["u"],
+        ghia["y"],
+        "s",
+        label="Ghia et al. (1982)",
+        markersize=4,
+    )
+
+    axes[0].set_xlabel(r"$u$ at $x=0.5$")
+    axes[0].set_ylabel("y")
+    axes[0].set_title("Vertical centerline velocity")
+    axes[0].grid(True, alpha=0.3)
+    axes[0].legend(fontsize=7)
+
+    axes[0].text(
+        0.05,
+        0.12,
+        f"RMSE = {errors['u_L2']:.4f}",
+        transform=axes[0].transAxes,
+        fontsize=9,
+        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
+    )
+
+    # -------------------------------------------------
+    # v velocity along horizontal centerline y = 0.5
+    # -------------------------------------------------
+    axes[1].plot(
+        Xp[:, j_mid],
+        v_c[:, j_mid],
+        "o-",
+        label="simulation",
+        markersize=4,
+    )
+    axes[1].plot(
+        ghia["x"],
+        ghia["v"],
+        "s",
+        label="Ghia et al. (1982)",
+        markersize=4,
+    )
+
+    axes[1].set_xlabel(r"$x$")
+    axes[1].set_ylabel(r"$v$ at $y=0.5$")
+    axes[1].set_title("Horizontal centerline velocity")
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend(fontsize=7)
+    axes[1].axhline(0, color="gray", lw=0.8, alpha=0.5)
+
+    axes[1].text(
+        0.05,
+        0.12,
+        f"RMSE = {errors['v_L2']:.4f}",
+        transform=axes[1].transAxes,
+        fontsize=9,
+        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
+    )
+
+    plt.tight_layout()
+    plt.savefig("fig5_ghia_centerline_comparison_re100.png", dpi=300)
+    plt.show()
+
+def plot_grid_convergence_loglog(grid_list, u_errors, v_errors):
+    h = 1.0 / np.array(grid_list)
+
+    plt.figure(figsize=(6, 5))
+
+    plt.loglog(
+        h,
+        u_errors,
+        "o-",
+        label=r"$u$ RMSE",
+        markersize=5,
+    )
+
+    plt.loglog(
+        h,
+        v_errors,
+        "s-",
+        label=r"$v$ RMSE",
+        markersize=5,
+    )
+
+    # refinement goes to the right
+    plt.gca().invert_xaxis()
+    plt.xlabel(r"Grid spacing $h$")
+    plt.ylabel("RMSE")
+    plt.title("Grid refinement study")
+    plt.grid(True, which="both", alpha=0.3)
+    plt.legend(fontsize=8)
+    plt.tight_layout()
+    plt.savefig("fig6_grid_refinement_re100.png", dpi=300)
+
+    plt.show()
+
+def plot_streamlines(Xp, Yp, u_c, v_c, Re):
+    speed = np.sqrt(u_c**2 + v_c**2)
+
+    plt.figure(figsize=(6, 5))
+    cf = plt.contourf(Xp, Yp, speed, levels=30)
+    plt.streamplot(
+        Xp.T, Yp.T,
+        u_c.T, v_c.T,
+        density=1.4,
+        linewidth=0.9,
+        arrowsize=0.8,
+        color="k",
+    )
+    plt.colorbar(cf, label="velocity magnitude")
+    plt.title(f"Lid-driven cavity flow at Re={Re:.0f}")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.axis("equal")
+    plt.tight_layout()
+    plt.savefig("fig3_streamlines_re100.png", dpi=300)
+    plt.show()
+
+def animate_velocity_field(history, Xp, Yp, face_to_center_func, skip=20):
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    # downsample arrows
+    stride = max(1, Xp.shape[0] // 20)
+
+    def get_frame_data(frame):
+        u_c, v_c = face_to_center_func(frame["u"], frame["v"])
+        speed = np.sqrt(u_c**2 + v_c**2)
+        return u_c, v_c, speed
+
+    # -------------------------------------------------
+    # fixed color scale over the whole animation
+    # -------------------------------------------------
+    global_speed_max = 0.0
+    for frame in history:
+        _, _, speed = get_frame_data(frame)
+        global_speed_max = max(global_speed_max, np.max(speed))
+
+    levels = np.linspace(0.0, global_speed_max, 30)
+
+    # initial frame
+    u_c, v_c, speed = get_frame_data(history[0])
+
+    contour = ax.contourf(Xp, Yp, speed, levels=30)
+    q = ax.quiver(
+        Xp[::stride, ::stride],
+        Yp[::stride, ::stride],
+        u_c[::stride, ::stride],
+        v_c[::stride, ::stride],
+        scale=12,
+        width=0.003,
+    )
+
+    fig.colorbar(contour, ax=ax, label="velocity magnitude")
+    ax.set_aspect("equal")
+
+    def update(frame_idx):
+        ax.clear()
+
+        frame = history[frame_idx]
+        u_c, v_c, speed = get_frame_data(frame)
+
+        ax.contourf(Xp, Yp, speed, levels=levels)
+        ax.quiver(
+            Xp[::stride, ::stride],
+            Yp[::stride, ::stride],
+            u_c[::stride, ::stride],
+            v_c[::stride, ::stride],
+            scale=12,
+            width=0.003,
+        )
+
+        ax.set_title(f"Velocity magnitude and field | step {frame['step']}")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_aspect("equal")
+
+    frames = range(0, len(history), skip)
+
+    anim = FuncAnimation(
+        fig,
+        update,
+        frames=frames,
+        interval=100,
+        blit=False,
+    )
+
+    plt.show()
+    return anim
+
+def plot_projection_diagnostics_clean(Xp, Yp, div_star, p, div_new, Re=100):
+    # mask boundary cells for cleaner interior visualization
+    div_star_plot = div_star.copy()
+    div_new_plot = div_new.copy()
+
+    div_star_plot[[0, -1], :] = np.nan
+    div_star_plot[:, [0, -1]] = np.nan
+    div_new_plot[[0, -1], :] = np.nan
+    div_new_plot[:, [0, -1]] = np.nan
+
+    # use a fixed clipped scale for visualization
+    div_max = 0.1
+    div_levels = np.linspace(-div_max, div_max, 31)
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+
+    # -------------------------
+    # before projection
+    # -------------------------
+    cf0 = axes[0].contourf(
+        Xp, Yp, div_star_plot,
+        levels=div_levels,
+        extend="both"
+    )
+    axes[0].set_title(r"$\nabla \cdot u^*$")
+    axes[0].set_xlabel("x")
+    axes[0].set_ylabel("y")
+    axes[0].set_aspect("equal")
+    fig.colorbar(cf0, ax=axes[0], fraction=0.046, pad=0.04)
+
+    # -------------------------
+    # after projection
+    # -------------------------
+    cf1 = axes[1].contourf(
+        Xp, Yp, div_new_plot,
+        levels=div_levels,
+        extend="both"
+    )
+    axes[1].set_title(r"$\nabla \cdot u^{n+1}$")
+    axes[1].set_xlabel("x")
+    axes[1].set_ylabel("y")
+    axes[1].set_aspect("equal")
+    fig.colorbar(cf1, ax=axes[1], fraction=0.046, pad=0.04)
+
+    # -------------------------
+    # quantitative reduction
+    # -------------------------
+    max_div_star = np.nanmax(np.abs(div_star_plot))
+    max_div_new = np.nanmax(np.abs(div_new_plot))
+    reduction = max_div_star / max_div_new if max_div_new > 0 else np.inf
+
+    axes[2].bar(
+        [r"$\nabla \cdot u^*$", r"$\nabla \cdot u^{n+1}$"],
+        [max_div_star, max_div_new]
+    )
+    axes[2].set_yscale("log")
+    axes[2].set_ylim(1e-7, 1)
+    axes[2].set_ylabel("max absolute divergence")
+    axes[2].set_title("divergence reduction")
+    axes[2].grid(True, axis="y", alpha=0.3)
+
+    axes[2].text(
+        0.5,
+        0.82,
+        f"reduction ≈ {reduction:.1f}×",
+        ha="center",
+        va="center",
+        transform=axes[2].transAxes
+    )
+
+    plt.tight_layout()
+    plt.savefig("fig4_projection_diagnostics_re100.png", dpi=300)
+    plt.show()
+
+    return {
+    "max_div_star": max_div_star,
+    "max_div_new": max_div_new,
+    "reduction_factor": reduction
+    }
+
+# ============================================================
+# Legacy/debug plotting utilities
+# ============================================================
+# These functions are retained for development history,
+# intermediate projection diagnostics, and MAC-grid debugging.
+# They are not required by the final benchmark/report pipeline.
+
 def plot_mac_layout(Xp, Yp, Xu, Yu, Xv, Yv, Nx, Ny, Lx=1.0, Ly=1.0):
     plt.figure(figsize=(7, 7))
 
@@ -87,17 +552,45 @@ def plot_mac_overview(Xp, Yp, Xu, Yu, Xv, Yv, div_star, div_new, Nx, Ny, Lx=1.0,
     plt.tight_layout()
     plt.show()
 
-# 可看到 p, u, v grid 分開
 def plot_full_overview(Xp, Yp, Xu, Yu, Xv, Yv,
                       div_star, div_new,
                       Nx, Ny, Lx=1.0, Ly=1.0):
 
+    """
+    Visualize the MAC-grid arrangement together with divergence fields
+    before and after projection.
+
+    This function provides:
+    - the staggered locations of pressure and velocity variables,
+    - an overlay view of the MAC grid,
+    - divergence of the predictor velocity field (div_star),
+    - divergence after projection (div_new).
+
+    Parameters
+    ----------
+    Xp, Yp : ndarray
+        Cell-centered coordinates for pressure.
+
+    Xu, Yu : ndarray
+        Face-centered coordinates for horizontal velocity u.
+
+    Xv, Yv : ndarray
+        Face-centered coordinates for vertical velocity v.
+
+    div_star : ndarray
+        Divergence field before projection.
+
+    div_new : ndarray
+        Divergence field after projection.
+
+    Nx, Ny : int
+        Number of pressure cells in x and y directions.
+
+    Lx, Ly : float, optional
+        Physical domain size.
+    """
     fig = plt.figure(figsize=(16, 10))
-
-    # ===== 外層 grid：2 rows × 2 cols =====
     gs = fig.add_gridspec(2, 2, width_ratios=[2, 1])
-
-    # ===== 左邊再切成 2x2 =====
     gs_left = gs[:, 0].subgridspec(2, 2)
 
     axes_left = [
@@ -106,12 +599,9 @@ def plot_full_overview(Xp, Yp, Xu, Yu, Xv, Yv,
         fig.add_subplot(gs_left[1, 0]),  # v
         fig.add_subplot(gs_left[1, 1])   # overlay
     ]
-
-    # ===== 右邊 =====
     ax_div_star = fig.add_subplot(gs[0, 1])
     ax_div_new  = fig.add_subplot(gs[1, 1])
 
-    # ===== 共用 grid =====
     x_edges = np.linspace(0.0, Lx, Nx + 1)
     y_edges = np.linspace(0.0, Ly, Ny + 1)
 
@@ -123,8 +613,6 @@ def plot_full_overview(Xp, Yp, Xu, Yu, Xv, Yv,
         ax.set_xlim(-0.02, Lx + 0.02)
         ax.set_ylim(-0.02, Ly + 0.02)
         ax.set_aspect('equal')
-
-    # ===== 左邊 4 張 =====
 
     # p
     ax = axes_left[0]
@@ -153,8 +641,6 @@ def plot_full_overview(Xp, Yp, Xu, Yu, Xv, Yv,
     ax.set_title("overlay")
     ax.legend(fontsize=8)
 
-    # ===== 右邊 divergence =====
-
     vmax = max(np.max(np.abs(div_star)), np.max(np.abs(div_new)))
     levels = np.linspace(-vmax, vmax, 21)
 
@@ -172,8 +658,6 @@ def plot_full_overview(Xp, Yp, Xu, Yu, Xv, Yv,
     plt.tight_layout()
     plt.show()
 
-# [ MAC layout ]   [ u_star ]     [ grad(p) ]
-# [ u_new      ]   [ div_star ]   [ div_new ]
 def plot_projection_debug(
     Xp, Yp, Xu, Yu, Xv, Yv,
     u_star, v_star,
@@ -346,173 +830,12 @@ def plot_vector_decomposition(u_star, v_star, u_new, v_new, Xp, Yp):
     plt.tight_layout()
     plt.show()
 
-# [ MAC layout ]   [ u_star ]        [ velocity field ]   [ correction = -grad(p) ]
-# [ u_new      ]   [ div_star ]      [ div_new        ]   [ debug slot            ]
-
-def plot_projection_dashboard(
-    Xp, Yp, Xu, Yu, Xv, Yv,
-    u_star, v_star,
-    u_new, v_new,
-    p,
-    div_star, div_new,
-    dx, dy,
-    Nx, Ny, Lx=1.0, Ly=1.0
-):
-    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
-    axes = axes.flatten()
-
-    # -------------------------
-    # common grid
-    # -------------------------
-    x_edges = np.linspace(0.0, Lx, Nx + 1)
-    y_edges = np.linspace(0.0, Ly, Ny + 1)
-
-    def draw_base(ax):
-        for x in x_edges:
-            ax.axvline(x, color='gray', lw=1, alpha=0.25)
-        for y in y_edges:
-            ax.axhline(y, color='gray', lw=1, alpha=0.25)
-        ax.set_xlim(-0.02, Lx + 0.02)
-        ax.set_ylim(-0.02, Ly + 0.02)
-        ax.set_aspect('equal')
-
-    # -------------------------
-    # interpolate helper
-    # -------------------------
-    def face_to_center(u, v):
-        uc = 0.5 * (u[:-1, :] + u[1:, :])
-        vc = 0.5 * (v[:, :-1] + v[:, 1:])
-        return uc, vc
-
-    # -------------------------
-    # safe quiver helper
-    # -------------------------
-    def safe_quiver(ax, X, Y, U, V, title, scale=None):
-        draw_base(ax)
-        mag = np.sqrt(U**2 + V**2)
-        if np.max(mag) < 1e-14:
-            ax.text(
-                0.5, 0.5, "≈ 0 everywhere",
-                ha="center", va="center",
-                transform=ax.transAxes
-            )
-        else:
-            if scale is None:
-                ax.quiver(X, Y, U, V)
-            else:
-                ax.quiver(X, Y, U, V, scale=scale)
-        ax.set_title(title)
-
-    # =========================
-    # (1) MAC layout
-    # =========================
-    ax = axes[0]
-    draw_base(ax)
-    ax.scatter(Xp, Yp, c='black', s=30, label='p')
-    ax.scatter(Xu, Yu, c='red', s=15, marker='s', label='u')
-    ax.scatter(Xv, Yv, c='blue', s=15, marker='^', label='v')
-    ax.set_title("MAC layout")
-    ax.legend(fontsize=8, loc='upper right')
-
-    # =========================
-    # (2) u_star
-    # =========================
-    u_star_c, v_star_c = face_to_center(u_star, v_star)
-    safe_quiver(axes[1], Xp, Yp, u_star_c, v_star_c, "u_star")
-
-    # =========================
-    # (3) velocity field (same as u_new, emphasized as actual flow)
-    # =========================
-    u_new_c, v_new_c = face_to_center(u_new, v_new)
-    safe_quiver(axes[2], Xp, Yp, u_new_c, v_new_c, "velocity field")
-
-    # =========================
-    # (4) correction = -grad(p)
-    # =========================
-    dpdx_u, dpdy_v = compute_pressure_gradient_mac(p, dx, dy)
-    dpdx_c = 0.5 * (dpdx_u[:-1, :] + dpdx_u[1:, :])
-    dpdy_c = 0.5 * (dpdy_v[:, :-1] + dpdy_v[:, 1:])
-
-    corr_u = -dpdx_c
-    corr_v = -dpdy_c
-    safe_quiver(axes[3], Xp, Yp, corr_u, corr_v, "correction = -grad(p)")
-
-    # =========================
-    # (5) u_new
-    # =========================
-    safe_quiver(axes[4], Xp, Yp, u_new_c, v_new_c, "u_new")
-
-    # =========================
-    # shared color scale
-    # =========================
-    vmax = max(np.max(np.abs(div_star)), np.max(np.abs(div_new)))
-    if vmax < 1e-14:
-        vmax = 1.0
-    levels = np.linspace(-vmax, vmax, 21)
-
-    # =========================
-    # (6) div_star
-    # =========================
-    ax = axes[5]
-    draw_base(ax)
-    cf1 = ax.contourf(Xp, Yp, div_star, levels=levels)
-    ax.set_title("div_star")
-    fig.colorbar(cf1, ax=ax)
-
-    # =========================
-    # (7) div_new
-    # =========================
-    ax = axes[6]
-    draw_base(ax)
-    cf2 = ax.contourf(Xp, Yp, div_new, levels=levels)
-    ax.set_title("div_new")
-    fig.colorbar(cf2, ax=ax)
-
-    # =========================
-    # (8) projection diagnostics
-    # =========================
-    ax = axes[7]
-    ax.axis("off")
-    ax.text(
-        0.5, 0.75,
-        "projection diagnostics",
-        ha="center", va="center",
-        fontsize=14,
-        transform=ax.transAxes
-    )
-    ax.text(
-        0.5, 0.48,
-        f"max|div_star| = {np.max(np.abs(div_star)):.3e}",
-        ha="center", va="center",
-        fontsize=11,
-        transform=ax.transAxes
-    )
-    ax.text(
-        0.5, 0.34,
-        f"max|div_new|  = {np.max(np.abs(div_new)):.3e}",
-        ha="center", va="center",
-        fontsize=11,
-        transform=ax.transAxes
-    )
-    ax.text(
-        0.5, 0.20,
-        f"max|div_new interior| = {np.max(np.abs(div_new[1:-1, 1:-1])):.3e}",
-        ha="center", va="center",
-        fontsize=11,
-        transform=ax.transAxes
-    )
-
-    plt.tight_layout()
-    plt.show()
-
-
 def plot_final_velocity(Xp, Yp, u_c, v_c):
     plt.figure(figsize=(6, 5))
     plt.quiver(Xp, Yp, u_c, v_c)
     plt.title("Final velocity field")
     plt.gca().set_aspect("equal")
     plt.show()
-
 
 def plot_divergence(Xp, Yp, div, title="Final divergence"):
     plt.figure(figsize=(6, 5))
@@ -521,7 +844,6 @@ def plot_divergence(Xp, Yp, div, title="Final divergence"):
     plt.title(title)
     plt.gca().set_aspect("equal")
     plt.show()
-
 
 def plot_centerline_u(Y, u_sim, ghia, Re=100):
     plt.figure(figsize=(5, 4))
@@ -534,7 +856,6 @@ def plot_centerline_u(Y, u_sim, ghia, Re=100):
     plt.legend()
     plt.show()
 
-
 def plot_centerline_v(X, v_sim, ghia, Re=100):
     plt.figure(figsize=(5, 4))
     plt.plot(X, v_sim, marker="o", label="simulation")
@@ -544,84 +865,6 @@ def plot_centerline_v(X, v_sim, ghia, Re=100):
     plt.title(f"Centerline v profile, Re={Re:.0f}")
     plt.grid(True)
     plt.legend()
-    plt.show()
-
-def plot_ghia_comparison_combined(Xp, Yp, u_c, v_c, ghia, errors, Re=100):
-    Nx, Ny = u_c.shape
-    i_mid = Nx // 2
-    j_mid = Ny // 2
-
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-
-    # -------------------------------------------------
-    # u velocity along vertical centerline x = 0.5
-    # -------------------------------------------------
-    axes[0].plot(
-        u_c[i_mid, :],
-        Yp[i_mid, :],
-        "o-",
-        label="simulation",
-        markersize=4,
-    )
-    axes[0].plot(
-        ghia["u"],
-        ghia["y"],
-        "s",
-        label="Ghia et al. (1982)",
-        markersize=4,
-    )
-
-    axes[0].set_xlabel(r"$u$ at $x=0.5$")
-    axes[0].set_ylabel("y")
-    axes[0].set_title("Vertical centerline velocity")
-    axes[0].grid(True, alpha=0.3)
-    axes[0].legend(fontsize=7)
-
-    axes[0].text(
-        0.05,
-        0.12,
-        f"RMSE = {errors['u_L2']:.4f}",
-        transform=axes[0].transAxes,
-        fontsize=9,
-        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
-    )
-
-    # -------------------------------------------------
-    # v velocity along horizontal centerline y = 0.5
-    # -------------------------------------------------
-    axes[1].plot(
-        Xp[:, j_mid],
-        v_c[:, j_mid],
-        "o-",
-        label="simulation",
-        markersize=4,
-    )
-    axes[1].plot(
-        ghia["x"],
-        ghia["v"],
-        "s",
-        label="Ghia et al. (1982)",
-        markersize=4,
-    )
-
-    axes[1].set_xlabel(r"$x$")
-    axes[1].set_ylabel(r"$v$ at $y=0.5$")
-    axes[1].set_title("Horizontal centerline velocity")
-    axes[1].grid(True, alpha=0.3)
-    axes[1].legend(fontsize=7)
-    axes[1].axhline(0, color="gray", lw=0.8, alpha=0.5)
-
-    axes[1].text(
-        0.05,
-        0.12,
-        f"RMSE = {errors['v_L2']:.4f}",
-        transform=axes[1].transAxes,
-        fontsize=9,
-        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
-    )
-
-    plt.tight_layout()
-    plt.savefig("fig5_ghia_centerline_comparison_re100.png", dpi=300)
     plt.show()
 
 def plot_grid_convergence(grid_list, u_errors, v_errors):
@@ -634,226 +877,3 @@ def plot_grid_convergence(grid_list, u_errors, v_errors):
     plt.grid(True)
     plt.legend()
     plt.show()
-
-def plot_grid_convergence_loglog(grid_list, u_errors, v_errors):
-    h = 1.0 / np.array(grid_list)
-
-    plt.figure(figsize=(6, 5))
-
-    plt.loglog(
-        h,
-        u_errors,
-        "o-",
-        label=r"$u$ RMSE",
-        markersize=5,
-    )
-
-    plt.loglog(
-        h,
-        v_errors,
-        "s-",
-        label=r"$v$ RMSE",
-        markersize=5,
-    )
-
-    # refinement goes to the right
-    plt.gca().invert_xaxis()
-
-    plt.xlabel(r"Grid spacing $h$")
-    plt.ylabel("RMSE")
-    plt.title("Grid refinement study")
-    plt.grid(True, which="both", alpha=0.3)
-
-    plt.legend(fontsize=8)
-
-    plt.tight_layout()
-    plt.savefig("fig6_grid_refinement_re100.png", dpi=300)
-
-    plt.show()
-
-def plot_streamlines(Xp, Yp, u_c, v_c, Re):
-    speed = np.sqrt(u_c**2 + v_c**2)
-
-    plt.figure(figsize=(6, 5))
-    cf = plt.contourf(Xp, Yp, speed, levels=30)
-    plt.streamplot(
-        Xp.T, Yp.T,
-        u_c.T, v_c.T,
-        density=1.4,
-        linewidth=0.9,
-        arrowsize=0.8,
-        color="k",
-    )
-    plt.colorbar(cf, label="velocity magnitude")
-    plt.title(f"Lid-driven cavity flow at Re={Re:.0f}")
-    plt.xlabel("x")
-    plt.ylabel("y")
-    plt.axis("equal")
-    plt.tight_layout()
-    plt.savefig("fig3_streamlines_re100.png", dpi=300)
-    plt.show()
-
-def animate_velocity_field_ghost(history, Xp, Yp, face_to_center_func, skip=20):
-    fig, ax = plt.subplots(figsize=(6, 5))
-
-    first = history[0]
-    u_c, v_c = face_to_center_func(first["u"], first["v"])
-
-    q = ax.quiver(Xp, Yp, u_c, v_c)
-    ax.set_aspect("equal")
-    ax.set_title("Velocity field evolution")
-
-    def update(frame_idx):
-        frame = history[frame_idx]
-        u_c, v_c = face_to_center_func(frame["u"], frame["v"])
-        q.set_UVC(u_c, v_c)
-        ax.set_title(f"Velocity field evolution | step {frame['step']}")
-        return q,
-
-    frames = range(0, len(history), skip)
-
-    anim = FuncAnimation(
-        fig,
-        update,
-        frames=frames,
-        interval=100,
-        blit=False,
-    )
-
-    plt.show()
-    return anim
-
-def animate_velocity_field_pretty(history, Xp, Yp, face_to_center_func, skip=20):
-    fig, ax = plt.subplots(figsize=(6, 5))
-
-    # downsample arrows
-    stride = max(1, Xp.shape[0] // 20)
-
-    def get_frame_data(frame):
-        u_c, v_c = face_to_center_func(frame["u"], frame["v"])
-        speed = np.sqrt(u_c**2 + v_c**2)
-        return u_c, v_c, speed
-
-    u_c, v_c, speed = get_frame_data(history[0])
-
-    contour = ax.contourf(Xp, Yp, speed, levels=30)
-    q = ax.quiver(
-        Xp[::stride, ::stride],
-        Yp[::stride, ::stride],
-        u_c[::stride, ::stride],
-        v_c[::stride, ::stride],
-        scale=12,
-        width=0.003,
-    )
-
-    fig.colorbar(contour, ax=ax, label="velocity magnitude")
-    ax.set_aspect("equal")
-
-    def update(frame_idx):
-        ax.clear()
-
-        frame = history[frame_idx]
-        u_c, v_c, speed = get_frame_data(frame)
-
-        ax.contourf(Xp, Yp, speed, levels=30)
-        ax.quiver(
-            Xp[::stride, ::stride],
-            Yp[::stride, ::stride],
-            u_c[::stride, ::stride],
-            v_c[::stride, ::stride],
-            scale=12,
-            width=0.003,
-        )
-
-        ax.set_title(f"Velocity magnitude and field | step {frame['step']}")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_aspect("equal")
-
-    frames = range(0, len(history), skip)
-
-    anim = FuncAnimation(
-        fig,
-        update,
-        frames=frames,
-        interval=100,
-        blit=False,
-    )
-
-    plt.show()
-    return anim
-
-def plot_projection_diagnostics_clean(Xp, Yp, div_star, p, div_new, Re=100):
-    # mask boundary cells for cleaner interior visualization
-    div_star_plot = div_star.copy()
-    div_new_plot = div_new.copy()
-
-    div_star_plot[[0, -1], :] = np.nan
-    div_star_plot[:, [0, -1]] = np.nan
-    div_new_plot[[0, -1], :] = np.nan
-    div_new_plot[:, [0, -1]] = np.nan
-
-    # use a fixed clipped scale for visualization
-    div_max = 0.1
-    div_levels = np.linspace(-div_max, div_max, 31)
-
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
-
-    # -------------------------
-    # before projection
-    # -------------------------
-    cf0 = axes[0].contourf(
-        Xp, Yp, div_star_plot,
-        levels=div_levels,
-        extend="both"
-    )
-    axes[0].set_title(r"$\nabla \cdot u^*$")
-    axes[0].set_xlabel("x")
-    axes[0].set_ylabel("y")
-    axes[0].set_aspect("equal")
-    fig.colorbar(cf0, ax=axes[0], fraction=0.046, pad=0.04)
-
-    # -------------------------
-    # after projection
-    # -------------------------
-    cf1 = axes[1].contourf(
-        Xp, Yp, div_new_plot,
-        levels=div_levels,
-        extend="both"
-    )
-    axes[1].set_title(r"$\nabla \cdot u^{n+1}$")
-    axes[1].set_xlabel("x")
-    axes[1].set_ylabel("y")
-    axes[1].set_aspect("equal")
-    fig.colorbar(cf1, ax=axes[1], fraction=0.046, pad=0.04)
-
-    # -------------------------
-    # quantitative reduction
-    # -------------------------
-    max_div_star = np.nanmax(np.abs(div_star_plot))
-    max_div_new = np.nanmax(np.abs(div_new_plot))
-    reduction = max_div_star / max_div_new if max_div_new > 0 else np.inf
-
-    axes[2].bar(
-        [r"$\nabla \cdot u^*$", r"$\nabla \cdot u^{n+1}$"],
-        [max_div_star, max_div_new]
-    )
-    axes[2].set_yscale("log")
-    axes[2].set_ylim(1e-7, 1)
-    axes[2].set_ylabel("max absolute divergence")
-    axes[2].set_title("divergence reduction")
-    axes[2].grid(True, axis="y", alpha=0.3)
-
-    axes[2].text(
-        0.5,
-        0.82,
-        f"reduction ≈ {reduction:.1f}×",
-        ha="center",
-        va="center",
-        transform=axes[2].transAxes
-    )
-
-    plt.tight_layout()
-    plt.savefig("fig4_projection_diagnostics_re100.png", dpi=300)
-    plt.show()
-
