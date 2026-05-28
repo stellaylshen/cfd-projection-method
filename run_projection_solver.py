@@ -32,8 +32,8 @@ from diag import (
 # Final report results use a 61x61 MAC pressure grid.
 # Smaller grids such as 21x21 are useful only for quick debugging.
 # -------------------------------------------------
-Nx = 21
-Ny = 21
+Nx = 61
+Ny = 61
 
 Re = 100.0
 nu = 1.0 / Re
