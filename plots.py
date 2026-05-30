@@ -525,7 +525,41 @@ def plot_grid_convergence_loglog(grid_list, u_errors, v_errors):
 
     plt.show()
 
+def plot_divergence_history(history):
+    max_div_star_hist = [
+        np.max(np.abs(frame["div_star"]))
+        for frame in history
+    ]
 
+    max_div_new_hist = [
+        np.max(np.abs(frame["div_new"]))
+        for frame in history
+    ]
+
+    plt.figure(figsize=(6, 4))
+    plt.semilogy(max_div_star_hist, label=r"$\max|\nabla\cdot u^*|$")
+    plt.semilogy(max_div_new_hist, label=r"$\max|\nabla\cdot u^{n+1}|$")
+    plt.xlabel("Timestep")
+    plt.ylabel("Maximum divergence magnitude")
+    plt.title("Divergence reduction during projection")
+    plt.legend()
+    plt.grid(True, which="both")
+    plt.tight_layout()
+    plt.savefig("figures/divergence_history.png", dpi=300)
+    plt.show()
+
+def plot_poisson_residual_history(diag_frame):
+    residual_hist = diag_frame["poisson_residual_history"]
+
+    plt.figure(figsize=(6, 4))
+    plt.semilogy(residual_hist)
+    plt.xlabel("SOR iteration")
+    plt.ylabel("Poisson update residual")
+    plt.title(f"Poisson SOR residual history at timestep {diag_frame['step']}")
+    plt.grid(True, which="both")
+    plt.tight_layout()
+    plt.savefig("figures/poisson_sor_residual_history.png", dpi=300)
+    plt.show()
 
 # ============================================================
 # Legacy/debug plotting utilities

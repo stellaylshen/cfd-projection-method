@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from core import (
     setup_mac_grid_ghost,
@@ -15,6 +16,8 @@ def run_case(N, nsteps=5000, dt=5e-3, Re=100.0):
     dx, dy, _, _, _, Xp, Yp, _, _, _, _ = setup_mac_grid_ghost(N, N)
     nu = 1.0 / Re
 
+    start_time = time.perf_counter()
+
     history = run_ns_projection_mac_ghost(
         N, N, dx, dy,
         nsteps=nsteps,
@@ -29,10 +32,30 @@ def run_case(N, nsteps=5000, dt=5e-3, Re=100.0):
     final = history[-1]
     u_c, v_c = face_to_center_velocity_ghost(final["u"], final["v"])
 
+    end_time = time.perf_counter()
+
+    runtime_seconds = end_time - start_time
+
+    avg_poisson_iterations = np.mean([
+        frame["poisson_iterations"]
+        for frame in history
+    ])
+
+    max_poisson_iterations = np.max([
+        frame["poisson_iterations"]
+        for frame in history
+    ])
+
     ghia = get_ghia_re100_data()
     errors = compute_ghia_errors(u_c, v_c, Xp, Yp, ghia)
 
-    return errors, history
+    return (
+    errors,
+    history,
+    runtime_seconds,
+    avg_poisson_iterations,
+    max_poisson_iterations,
+    )
 
 if __name__ == "__main__":
     grid_list = [21, 31, 41, 51, 61]
@@ -45,7 +68,13 @@ if __name__ == "__main__":
     for N in grid_list:
         nsteps = 5000 
         print(f"\nRunning GHOST N = {N}, nsteps = {nsteps} ...")
-        errors, history = run_case(N, nsteps=nsteps)
+        (
+            errors,
+            history,
+            runtime_seconds,
+            avg_poisson_iterations,
+            max_poisson_iterations,
+        ) = run_case(N, nsteps=nsteps)
 
         final = history[-1]
 
@@ -58,6 +87,9 @@ if __name__ == "__main__":
         "max_div": np.max(np.abs(final["div_new"])),
         "vel_change": final["velocity_change"],
         "steps": len(history),
+        "runtime_seconds": runtime_seconds,
+        "avg_poisson_iterations": avg_poisson_iterations,
+        "max_poisson_iterations": max_poisson_iterations,
         })
 
         print(f"u_L2 = {errors['u_L2']:.4f}, v_L2 = {errors['v_L2']:.4f}")
@@ -74,7 +106,10 @@ if __name__ == "__main__":
             f"v_max={row['v_max']:.4f} | "
             f"max_div={row['max_div']:.2e} | "
             f"vel_change={row['vel_change']:.2e} | "
-            f"steps={row['steps']}"
+            f"steps={row['steps']} | "
+            f"runtime={row['runtime_seconds']:.1f}s | "
+            f"avg_poisson_iter={row['avg_poisson_iterations']:.1f} | "
+            f"max_poisson_iter={row['max_poisson_iterations']:.0f}"
         )
 
     plot_grid_convergence(grid_list, u_errors, v_errors)
@@ -102,6 +137,4 @@ if __name__ == "__main__":
             f"N={N1}->{N2}: "
             f"p_u = {p_u:.2f}, p_v = {p_v:.2f}"
         )
-
-
 

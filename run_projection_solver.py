@@ -20,6 +20,8 @@ from plots import (
     animate_velocity_field,
     plot_projection_diagnostics_clean,
     plot_ghia_comparison_combined,
+    plot_divergence_history,
+    plot_poisson_residual_history,
 )
 
 from diag import (
@@ -108,6 +110,11 @@ print(
     final["vmax"]
 )
 
+u_min = np.min(u_c)
+v_min = np.min(v_c)
+
+print("final u_min =", u_min)
+print("final v_min =", v_min)
 # -------------------------------------------------
 # Plot
 # -------------------------------------------------
@@ -130,13 +137,26 @@ plot_ghia_comparison_combined(
 
 plot_streamlines(Xp, Yp, u_c, v_c, Re)
 
+plot_divergence_history(history)
 # -------------------------------------------------
 # Projection diagnostics
 # Use an intermediate frame to visualize divergence removal.
 # The final steady-state field has much weaker divergence, making
 # the projection effect less visible in the diagnostic plot.
 # -------------------------------------------------
-diag_frame = history[min(50, len(history) - 1)]
+diagnostic_step = 2000
+
+diag_frame = min(
+    history,
+    key=lambda frame: abs(frame["step"] - diagnostic_step)
+)
+
+plot_poisson_residual_history(diag_frame)
+
+print("Poisson diagnostic step =", diag_frame["step"])
+print("SOR iterations =", diag_frame["poisson_iterations"])
+print("initial SOR residual =", diag_frame["poisson_residual_history"][0])
+print("final SOR residual =", diag_frame["poisson_residual_history"][-1])
 
 diag_projection = plot_projection_diagnostics_clean(
     Xp,
@@ -146,8 +166,6 @@ diag_projection = plot_projection_diagnostics_clean(
     diag_frame["div_new"],
     Re,
 )
-
-print(diag_projection)
 
 anim = animate_velocity_field(
     history,
@@ -162,3 +180,4 @@ print("final speed max =", np.max(speed))
 print("final umax =", final["umax"])
 print("final vmax =", final["vmax"])
 print("final step =", final["step"])
+

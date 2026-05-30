@@ -112,7 +112,7 @@ def compute_laplacian_center(p, dx, dy):
     return lap
 
 def solve_poisson_sor_mac(
-    rhs, dx, dy, omega=1.7, max_iter=1000, tol=1e-6, verbose=False
+    rhs, dx, dy, omega=1.7, max_iter=1000, tol=1e-6, verbose=False, return_residual_history=False
 ):
     Nx, Ny = rhs.shape
 
@@ -122,6 +122,8 @@ def solve_poisson_sor_mac(
 
     inv_dx2 = 1.0 / dx**2
     inv_dy2 = 1.0 / dy**2
+
+    residual_history = []
 
     for it in range(max_iter):
         p_old = p.copy()
@@ -153,12 +155,16 @@ def solve_poisson_sor_mac(
         p -= np.mean(p)
 
         err = np.max(np.abs(p - p_old))
+        residual_history.append(err)
 
         if err < tol:
             if verbose:
                 print(f"SOR converged at iter {it}, err={err:.3e}")
             break
-
+            
+    if return_residual_history:
+        return p, residual_history
+    
     return p
 
 def project_velocity_mac_ghost(u_star, v_star, p, dx, dy, dt):
@@ -362,12 +368,13 @@ def step_ns_projection_mac_ghost(u, v, dx, dy, dt, nu, U_lid=1.0):
     rhs_max_interior = np.max(np.abs(rhs[1:-1, 1:-1]))
 
     # 5. Solve the pressure Poisson equation.
-    p = solve_poisson_sor_mac(
+    p, poisson_residual_history  = solve_poisson_sor_mac(
         rhs, dx, dy,
         omega=1.7,
         max_iter=1000,
         tol=1e-6,
         verbose=False,
+        return_residual_history=True,
     )
 
     # 6. Projection step.
@@ -398,6 +405,8 @@ def step_ns_projection_mac_ghost(u, v, dx, dy, dt, nu, U_lid=1.0):
         "cfl": cfl,
         "umax": umax,
         "vmax": vmax,
+        "poisson_residual_history": poisson_residual_history,
+        "poisson_iterations": len(poisson_residual_history),
     }
 
 def run_ns_projection_mac_ghost(
@@ -449,6 +458,8 @@ def run_ns_projection_mac_ghost(
             "cfl": results["cfl"],
             "umax": results["umax"],
             "vmax": results["vmax"],
+            "poisson_residual_history": results["poisson_residual_history"],
+            "poisson_iterations": results["poisson_iterations"],
         })
 
         if steady_tol is not None and (step + 1) >= min_steps:
