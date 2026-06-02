@@ -1,12 +1,15 @@
-# 2D Incompressible Navier–Stokes Solver (Projection Method)
+# 2D Incompressible Navier–Stokes Solver
+### MAC Staggered-Grid Projection Method
 
 ## Overview
 
-This project implements a 2D incompressible Navier–Stokes solver from scratch using a finite-difference projection method.
+![velocity evolution](velocity_evolution.gif)
 
-The primary goal is not only to reproduce the classical lid-driven cavity benchmark, but also to investigate the numerical structure of incompressible flow solvers, particularly pressure–velocity coupling, incompressibility enforcement, and staggered-grid discretization.
+This project implements a 2D incompressible Navier–Stokes solver from scratch in Python using a finite-difference projection method on a ghost-cell MAC staggered grid.
 
-The implementation focuses on understanding the numerical behavior of the solver rather than treating CFD as a black-box simulation pipeline.
+The final simulation reproduces the classical lid-driven cavity benchmark at Re = 100 and compares the centerline velocity profiles against the reference data of Ghia et al. (1982).
+
+## Key Results
 
 ## Features
 
