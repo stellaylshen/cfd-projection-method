@@ -259,7 +259,7 @@ def animate_velocity_field(history, Xp, Yp, face_to_center_func, skip=20):
     # initial frame
     u_c, v_c, speed = get_frame_data(history[0])
 
-    contour = ax.contourf(Xp, Yp, speed, levels=30)
+    contour = ax.contourf(Xp, Yp, speed, levels=levels)
     q = ax.quiver(
         Xp[::stride, ::stride],
         Yp[::stride, ::stride],
@@ -484,6 +484,41 @@ def plot_ghia_comparison_combined(Xp, Yp, u_c, v_c, ghia, errors, Re=100):
     plt.savefig(FIG_DIR / "ghia_centerline_comparison_re100.png", dpi=300)
     plt.show()
 
+def plot_grid_convergence(grid_list, u_errors, v_errors):
+    plt.figure(figsize=(6,4))
+
+    plt.plot(
+        grid_list,
+        u_errors,
+        "o-",
+        linewidth=2,
+        label="u centerline L2 error",
+    )
+
+    plt.plot(
+        grid_list,
+        v_errors,
+        "s-",
+        linewidth=2,
+        label="v centerline L2 error",
+    )
+
+    plt.xlabel("Grid size N")
+    plt.ylabel("L2 error")
+    plt.title("Grid refinement study (Re=100)")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    plt.tight_layout()
+
+    plt.savefig(
+        "figures/grid_convergence_re100.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
+
+    plt.show()
+
 def plot_grid_convergence_loglog(grid_list, u_errors, v_errors):
     """
     Plot grid-refinement errors on a log-log scale.
@@ -516,12 +551,12 @@ def plot_grid_convergence_loglog(grid_list, u_errors, v_errors):
     plt.gca().invert_xaxis()
     plt.xlabel(r"Grid spacing $h$")
     plt.ylabel("RMSE")
-    plt.title("Grid refinement study")
+    plt.title("Error convergence with grid spacing")
     plt.grid(True, which="major", alpha=0.3)
     plt.legend(fontsize=8)
     plt.xticks(rotation=15)
     plt.tight_layout(pad=1.2)
-    plt.savefig(FIG_DIR / "grid_refinement_re100.png", dpi=300)
+    plt.savefig(FIG_DIR / "grid_refinement_loglog_re100.png", dpi=300)
 
     plt.show()
 
@@ -971,7 +1006,7 @@ def plot_centerline_v(X, v_sim, ghia, Re=100):
     plt.legend()
     plt.show()
 
-def plot_grid_convergence(grid_list, u_errors, v_errors):
+def plot_grid_convergence_old(grid_list, u_errors, v_errors):
     plt.figure(figsize=(5, 4))
     plt.plot(grid_list, u_errors, "o-", label="u centerline L2 error")
     plt.plot(grid_list, v_errors, "s-", label="v centerline L2 error")
