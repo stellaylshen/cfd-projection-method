@@ -11,66 +11,69 @@ The final simulation reproduces the classical lid-driven cavity benchmark at Re 
 
 ## Key Results
 
-## Features
+![streamlines](figures/streamlines_re100.png)
 
-- Finite-difference discretization (2D)
-- Projection method for incompressibility enforcement
-- Pressure Poisson equation solver
-- Staggered (MAC-like) grid formulation
-- Divergence diagnostics and consistency checks
-- Lid-driven cavity benchmark validation
-- Jacobi and SOR iterative solvers
+![Ghia comparison](figures/ghia_centerline_comparison_re100.png)
 
-## Current Status
+![projection diagnostics](figures/projection_diagnostics_re100.png)
 
-- Projection pipeline implemented
-- Divergence reduction verified
-- MAC staggered-grid formulation implemented
-- Velocity-field and divergence visualization completed
-- Preliminary benchmark comparison against cavity-flow reference data
-- Ongoing refinement of:
-  - boundary-condition consistency
-  - pressure projection
-  - solver stability
+## Numerical Methods
 
-## Numerical Challenges Explored
-
-This repository documents several intermediate implementation and debugging stages, including:
-
-- Checkerboard pressure artifacts in collocated grids
-- Pressure–velocity decoupling
-- Divergence persistence after projection
-- Neumann pressure gauge fixing
-- Jacobi vs. SOR convergence behavior
-- Boundary-condition consistency on staggered grids
+- 2D incompressible Navier–Stokes equations
+- Finite-difference discretization
+- Ghost-cell MAC staggered grid
+- Explicit advection–diffusion predictor
+- Pressure Poisson equation
+- SOR iterative Poisson solver
+- Pressure projection for incompressibility enforcement
+- Divergence diagnostics before and after projection
+- Benchmark validation against Ghia et al. (1982)
 
 ## Repository Structure
 
 ```text
 run_projection_solver.py
-Main driver used to reproduce the final Re=100 cavity simulation and report figures.
+Final Re=100 lid-driven cavity simulation. Generates the benchmark plots and velocity GIF.
+
+core.py
+Core numerical routines: MAC grid setup, ghost-cell boundary conditions, predictor step, Poisson solver, projection step, and time integration.
+
+diag.py
+Ghia et al. benchmark data and error computation.
+
+plots.py
+Visualization routines for velocity fields, streamlines, projection diagnostics, benchmark comparison, and animation.
 
 grid_convergence_study.py
-Runs grid-refinement cases and generates convergence data.
+Grid-refinement study for N = 21, 31, 41, 51, 61.
 
-test_operator_consistency.py
-Standalone consistency checks for divergence, gradient, projection, and ghost-cell operators.
+test/test_operator_consistency.py
+Sanity checks for MAC-grid shapes, ghost-cell boundary conditions, discrete divergence, pressure gradient, and projection behavior.
 
 experiments/
-Exploratory scripts used during development, including collocated-grid pathology and archived solver variants.
+Archived development scripts documenting earlier collocated-grid and debugging experiments.
 ```
 
-## Notes
-This repository reflects an evolving numerical implementation rather than a finalized CFD solver.
+## Development Highlights
+During development, several numerical issues commonly encountered in projection-based incompressible solvers were investigated:
 
-The commit history documents the development process, including debugging stages, numerical experiments, and design decisions made throughout the implementation.
+- checkerboard pressure artifacts in collocated grids
+- pressure–velocity decoupling
+- divergence persistence after projection
+- Neumann Poisson solvability and pressure gauge fixing
+- Jacobi vs. SOR convergence behavior
+- boundary-condition consistency on staggered grids
 
-## Future Work
-- Improve Poisson solver efficiency (GS / SOR / multigrid)
-- Refine boundary-condition treatment
-- Improve convergence behavior
-- Add higher-order advection schemes
-- Extend to passive scalar transport
+Several solver architectures were explored, including collocated-grid formulations, MAC staggered grids, and alternative pressure-correction approaches.
+
+## How to Run
+python run_projection_solver.py
+
+This generates:
+velocity_evolution.gif
+figures/streamlines_re100.png
+figures/ghia_centerline_comparison_re100.png
+figures/projection_diagnostics_re100.png
 
 ## Technologies
 - Python
